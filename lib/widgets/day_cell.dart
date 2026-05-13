@@ -346,17 +346,31 @@ class _ValuePickerDialog extends StatefulWidget {
 class _ValuePickerDialogState extends State<_ValuePickerDialog> {
   late Map<String, double> _currentRecords;
   late TextEditingController _commentController;
+  late Map<String, TextEditingController> _valueControllers;
 
   @override
   void initState() {
     super.initState();
     _currentRecords = Map.from(widget.initialRecords);
     _commentController = TextEditingController(text: widget.initialComment);
+
+    _valueControllers = {};
+    for (var cat in widget.categories) {
+      if (!cat.isLocked) {
+        final val = _currentRecords[cat.id] ?? 0.0;
+        _valueControllers[cat.id] = TextEditingController(
+          text: val == 0 ? '' : val.toStringAsFixed(2),
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
     _commentController.dispose();
+    for (var controller in _valueControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -521,6 +535,8 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
 
   Widget _buildEditableRow(Category cat) {
     final val = _currentRecords[cat.id] ?? 0.0;
+    final controller = _valueControllers[cat.id]!;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -546,9 +562,37 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              val.toStringAsFixed(2),
-              style: const TextStyle(color: Colors.white70),
+            SizedBox(
+              width: 70,
+              child: TextField(
+                controller: controller,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                textAlign: TextAlign.end,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  suffixText: ' JH',
+                  suffixStyle:
+                      const TextStyle(color: Colors.white38, fontSize: 10),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide:
+                        BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: cat.color),
+                  ),
+                ),
+                onChanged: (text) {
+                  final newVal =
+                      double.tryParse(text.replaceAll(',', '.')) ?? 0.0;
+                  setState(() {
+                    _currentRecords[cat.id] = newVal;
+                  });
+                },
+              ),
             ),
           ],
         ),
@@ -560,7 +604,7 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
             valueIndicatorTextStyle: const TextStyle(color: Colors.black),
           ),
           child: Slider(
-            value: val,
+            value: val.clamp(0.0, 1.0),
             min: 0.0,
             max: 1.0,
             divisions: 20,
@@ -568,6 +612,7 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
             onChanged: (newVal) {
               setState(() {
                 _currentRecords[cat.id] = newVal;
+                controller.text = newVal.toStringAsFixed(2);
               });
             },
           ),
