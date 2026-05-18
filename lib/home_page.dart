@@ -10,6 +10,8 @@ import 'services/napta_service.dart';
 import 'widgets/calendar_grid.dart';
 import 'widgets/category_manager_dialog.dart';
 import 'widgets/glass_container.dart';
+import 'services/update_service.dart';
+import 'widgets/update_dialog.dart';
 
 class HomePage extends StatefulWidget {
   final String? naptaSession;
@@ -48,12 +50,26 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _loadData();
     _startTodayTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkUpdates();
+    });
   }
 
   @override
   void dispose() {
     _todayTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkUpdates() async {
+    final updateInfo = await UpdateService.checkForUpdate();
+    if (updateInfo != null && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => UpdateDialog(updateInfo: updateInfo),
+      );
+    }
   }
 
   void _startTodayTimer() {
@@ -494,8 +510,11 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs
-        .clear(); // Wipe everything (records, statuses, credentials, etc.)
+    // Clear only session-specific data to preserve local comments and credentials
+    await prefs.remove('naptaSession');
+    await prefs.remove('dayRecordsData');
+    await prefs.remove('dayStatusesData');
+    await prefs.remove('categoriesData');
 
     try {
       final cookieManager = CookieManager.instance();

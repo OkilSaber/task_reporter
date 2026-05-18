@@ -1,11 +1,136 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class NaptaService {
   static const String _baseUrl = 'https://app.napta.io';
-  final String sessionCookie;
+  String sessionCookie;
 
   NaptaService({required this.sessionCookie});
+
+  static Future<String?>? _ongoingRelogin;
+
+  Future<http.Response> _sendRequest(
+    Future<http.Response> Function() requestFn,
+  ) async {
+    var response = await requestFn();
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      // Session expired/invalid, try auto relogin
+      final success = await _tryAutoRelogin();
+      if (success) {
+        // Retry the request with the new cookie
+        response = await requestFn();
+      }
+    }
+
+    return response;
+  }
+
+  Future<bool> _tryAutoRelogin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString('napta_email');
+      final password = prefs.getString('napta_password');
+
+      if (email == null || email.isEmpty || password == null || password.isEmpty) {
+        return false;
+      }
+
+      // Check if there is already an ongoing relogin
+      _ongoingRelogin ??= _performSilentLogin(email, password);
+      final newCookie = await _ongoingRelogin;
+      _ongoingRelogin = null;
+
+      if (newCookie != null && newCookie.isNotEmpty) {
+        sessionCookie = newCookie;
+        await prefs.setString('naptaSession', newCookie);
+        return true;
+      }
+    } catch (_) {
+      _ongoingRelogin = null;
+    }
+    return false;
+  }
+
+  Future<String?> _performSilentLogin(String email, String password) async {
+    final completer = Completer<String?>();
+    HeadlessInAppWebView? headlessWebView;
+
+    // Clear cookies first to ensure fresh login
+    try {
+      await CookieManager.instance().deleteAllCookies();
+    } catch (_) {}
+
+    headlessWebView = HeadlessInAppWebView(
+      initialUrlRequest: URLRequest(url: WebUri("https://app.napta.io/login")),
+      onLoadStop: (controller, url) async {
+        if (url != null && url.toString().contains('/login')) {
+          final emailJson = jsonEncode(email);
+          final passwordJson = jsonEncode(password);
+          final js = """
+            (function() {
+              var hasClicked = false;
+              function runStep() {
+                if (hasClicked) return;
+                try {
+                  var emailInput = document.getElementById('email');
+                  var passwordInput = document.getElementById('password');
+                  if (emailInput && emailInput.offsetParent !== null && !passwordInput) {
+                    emailInput.value = $emailJson;
+                    emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    var nextBtn = document.getElementsByClassName('napta-button')[0];
+                    if (nextBtn && nextBtn.offsetParent !== null) {
+                      hasClicked = true;
+                      nextBtn.click();
+                    }
+                  } else if (passwordInput && passwordInput.offsetParent !== null) {
+                    passwordInput.value = $passwordJson;
+                    passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    var loginBtn = document.getElementsByClassName('_button-login-password')[0];
+                    if (loginBtn && loginBtn.offsetParent !== null) {
+                      hasClicked = true;
+                      loginBtn.click();
+                    }
+                  }
+                } catch (e) {}
+              }
+              runStep();
+              setTimeout(runStep, 500);
+              setTimeout(runStep, 1500);
+            })();
+          """;
+          await controller.evaluateJavascript(source: js);
+        }
+
+        // Check for cookie
+        final cookie = await CookieManager.instance().getCookie(
+          url: WebUri("https://app.napta.io"),
+          name: "naptaSession",
+        );
+        if (cookie != null && cookie.value != null) {
+          if (!completer.isCompleted) {
+            completer.complete(cookie.value.toString());
+          }
+        }
+      },
+    );
+
+    await headlessWebView.run();
+
+    final result = await completer.future.timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => null,
+    );
+
+    try {
+      await headlessWebView.dispose();
+    } catch (_) {}
+
+    return result;
+  }
 
   Map<String, String> get _headers => {
     'accept': '*/*',
@@ -23,7 +148,7 @@ class NaptaService {
   Future<Map<String, dynamic>> whoAmI() async {
     final uri = Uri.parse('$_baseUrl/whoami');
 
-    final response = await http.get(uri, headers: _headers);
+    final response = await _sendRequest(() => http.get(uri, headers: _headers));
 
 
     if (response.statusCode == 200) {
@@ -49,13 +174,14 @@ class NaptaService {
     );
 
 
-    final jsonApiHeaders = {
-      ..._headers,
-      'accept': 'application/vnd.api+json',
-      'referer': 'https://app.napta.io/timesheet',
-    };
-
-    final response = await http.get(uri, headers: jsonApiHeaders);
+    final response = await _sendRequest(() {
+      final jsonApiHeaders = {
+        ..._headers,
+        'accept': 'application/vnd.api+json',
+        'referer': 'https://app.napta.io/timesheet',
+      };
+      return http.get(uri, headers: jsonApiHeaders);
+    });
 
 
     if (response.statusCode == 200) {
@@ -64,7 +190,7 @@ class NaptaService {
     } else if (response.statusCode == 401 || response.statusCode == 403) {
       throw NaptaAuthException('Session expirée ou invalide.');
     } else {
-      throw NaptaException('Erreur serveur (\${response.statusCode}).');
+      throw NaptaException('Erreur serveur (${response.statusCode}).');
     }
   }
 
@@ -161,7 +287,7 @@ class NaptaService {
       "page_number": 0
     };
 
-    final resp = await http.post(
+    final resp = await _sendRequest(() => http.post(
       uri,
       headers: {
         ..._headers,
@@ -170,7 +296,7 @@ class NaptaService {
         'referer': 'https://app.napta.io/timesheet',
       },
       body: jsonEncode(body),
-    );
+    ));
 
 
     if (resp.statusCode != 200) {
@@ -188,12 +314,6 @@ class NaptaService {
 
   /// Step 2: fetch project details — exact URL pattern from the browser
   Future<List<Map<String, dynamic>>> _fetchProjectDetails(List<String> projectIds) async {
-    final jsonApiHeaders = {
-      ..._headers,
-      'accept': 'application/vnd.api+json',
-      'referer': 'https://app.napta.io/timesheet',
-    };
-
     final projUri = Uri(
       scheme: 'https',
       host: 'app.napta.io',
@@ -209,7 +329,14 @@ class NaptaService {
       },
     );
 
-    final projResp = await http.get(projUri, headers: jsonApiHeaders);
+    final projResp = await _sendRequest(() {
+      final jsonApiHeaders = {
+        ..._headers,
+        'accept': 'application/vnd.api+json',
+        'referer': 'https://app.napta.io/timesheet',
+      };
+      return http.get(projUri, headers: jsonApiHeaders);
+    });
 
     if (projResp.statusCode != 200) {
       throw NaptaException('Erreur serveur projects (${projResp.statusCode}).');
@@ -318,7 +445,7 @@ class NaptaService {
       path: '/api/v1/timesheet_new/reporting',
     );
 
-    final resp = await http.post(
+    final resp = await _sendRequest(() => http.post(
       uri,
       headers: {
         ..._headers,
@@ -335,7 +462,7 @@ class NaptaService {
         'time_mode': 'day',
         'prefill_timesheets': true,
       }),
-    );
+    ));
 
 
     if (resp.statusCode != 200) {
@@ -425,7 +552,7 @@ class NaptaService {
       'prefill_timesheets': true,
     };
 
-    final resp = await http.post(
+    final resp = await _sendRequest(() => http.post(
       uri,
       headers: {
         ..._headers,
@@ -434,7 +561,7 @@ class NaptaService {
         'referer': 'https://app.napta.io/timesheet',
       },
       body: jsonEncode(body),
-    );
+    ));
 
 
     if (resp.statusCode != 200) {
@@ -462,7 +589,7 @@ class NaptaService {
       'prefill_timesheets': true,
     };
 
-    final resp = await http.post(
+    final resp = await _sendRequest(() => http.post(
       uri,
       headers: {
         ..._headers,
@@ -471,7 +598,7 @@ class NaptaService {
         'referer': 'https://app.napta.io/timesheet',
       },
       body: jsonEncode(body),
-    );
+    ));
 
 
     if (resp.statusCode != 200) {

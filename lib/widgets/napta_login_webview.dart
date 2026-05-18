@@ -16,6 +16,27 @@ class NaptaLoginWebView extends StatefulWidget {
 class _NaptaLoginWebViewState extends State<NaptaLoginWebView> {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
+  bool _cookiesCleared = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _clearCookies();
+  }
+
+  Future<void> _clearCookies() async {
+    try {
+      final cookieManager = CookieManager.instance();
+      await cookieManager.deleteAllCookies();
+    } catch (e) {
+      // Ignore cookie clearing errors
+    }
+    if (mounted) {
+      setState(() {
+        _cookiesCleared = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,26 +95,32 @@ class _NaptaLoginWebViewState extends State<NaptaLoginWebView> {
                   borderRadius: const BorderRadius.vertical(
                     bottom: Radius.circular(28),
                   ),
-                  child: InAppWebView(
-                    initialUrlRequest: URLRequest(
-                      url: WebUri("https://app.napta.io/login"),
-                    ),
-                    onWebViewCreated: (controller) {
-                      _webViewController = controller;
-                    },
-                    onLoadStart: (controller, url) {
-                      setState(() => _isLoading = true);
-                    },
-                    onLoadStop: (controller, url) async {
-                      setState(() => _isLoading = false);
-                      if (url != null && url.toString().contains('/login')) {
-                        _autoFill();
-                      }
-                      _checkForCookie();
-                    },
-                    onConsoleMessage: (controller, consoleMessage) {
-                    },
-                  ),
+                  child: !_cookiesCleared
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                          ),
+                        )
+                      : InAppWebView(
+                          initialUrlRequest: URLRequest(
+                            url: WebUri("https://app.napta.io/login"),
+                          ),
+                          onWebViewCreated: (controller) {
+                            _webViewController = controller;
+                          },
+                          onLoadStart: (controller, url) {
+                            setState(() => _isLoading = true);
+                          },
+                          onLoadStop: (controller, url) async {
+                            setState(() => _isLoading = false);
+                            if (url != null && url.toString().contains('/login')) {
+                              _autoFill();
+                            }
+                            _checkForCookie();
+                          },
+                          onConsoleMessage: (controller, consoleMessage) {
+                          },
+                        ),
                 ),
               ),
             ],
