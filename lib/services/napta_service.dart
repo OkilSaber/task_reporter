@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'secure_prefs.dart';
 
 class NaptaService {
   static const String _baseUrl = 'https://app.napta.io';
@@ -35,9 +35,8 @@ class NaptaService {
       return false;
     }
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final email = prefs.getString('napta_email');
-      final password = prefs.getString('napta_password');
+      final email = await SecurePrefs.read('napta_email');
+      final password = await SecurePrefs.read('napta_password');
 
       if (email == null || email.isEmpty || password == null || password.isEmpty) {
         return false;
@@ -50,7 +49,7 @@ class NaptaService {
 
       if (newCookie != null && newCookie.isNotEmpty) {
         sessionCookie = newCookie;
-        await prefs.setString('naptaSession', newCookie);
+        await SecurePrefs.write('naptaSession', newCookie);
         return true;
       }
     } catch (_) {

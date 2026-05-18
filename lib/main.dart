@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'services/secure_prefs.dart';
 import 'home_page.dart';
 import 'screens/login_screen.dart';
 import 'services/napta_service.dart';
@@ -48,7 +49,30 @@ class _SplashRouterState extends State<_SplashRouter> {
 
   Future<void> _route() async {
     final prefs = await SharedPreferences.getInstance();
-    final session = prefs.getString('naptaSession');
+    // Migrate cleartext credentials to secure storage if they exist
+    if (prefs.containsKey('naptaSession')) {
+      final oldSession = prefs.getString('naptaSession');
+      if (oldSession != null) {
+        await SecurePrefs.write('naptaSession', oldSession);
+      }
+      await prefs.remove('naptaSession');
+    }
+    if (prefs.containsKey('napta_email')) {
+      final oldEmail = prefs.getString('napta_email');
+      if (oldEmail != null) {
+        await SecurePrefs.write('napta_email', oldEmail);
+      }
+      await prefs.remove('napta_email');
+    }
+    if (prefs.containsKey('napta_password')) {
+      final oldPassword = prefs.getString('napta_password');
+      if (oldPassword != null) {
+        await SecurePrefs.write('napta_password', oldPassword);
+      }
+      await prefs.remove('napta_password');
+    }
+
+    final session = await SecurePrefs.read('naptaSession');
 
     if (!mounted) return;
 

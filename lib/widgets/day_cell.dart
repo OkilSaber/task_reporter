@@ -388,7 +388,7 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
         padding: const EdgeInsets.all(24),
         borderRadius: BorderRadius.circular(32),
         child: SizedBox(
-          width: 400,
+          width: 650,
           height: MediaQuery.of(context).size.height * 0.85,
           child: Column(
             mainAxisSize: MainAxisSize.min,

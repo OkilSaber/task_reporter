@@ -7,6 +7,7 @@ import '../services/napta_service.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/napta_login_webview.dart';
 import '../widgets/linux_cookie_dialog.dart';
+import '../services/secure_prefs.dart';
 import '../home_page.dart';
 import 'dart:io';
 
@@ -31,9 +32,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loadCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('napta_email');
-    final password = prefs.getString('napta_password');
+    final email = await SecurePrefs.read('napta_email');
+    final password = await SecurePrefs.read('napta_password');
     if (email != null) _emailController.text = email;
     if (password != null) _passwordController.text = password;
   }
@@ -59,10 +59,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
-    // Save credentials in shared_preferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('napta_email', email);
-    await prefs.setString('napta_password', password);
+    // Save credentials in secure storage
+    await SecurePrefs.write('napta_email', email);
+    await SecurePrefs.write('napta_password', password);
 
     final String? cookie;
     if (Platform.isLinux) {
@@ -144,8 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('naptaSession', cookie);
+      await SecurePrefs.write('naptaSession', cookie);
 
       if (mounted) {
         Navigator.of(context).pushReplacement(

@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "task_reporter" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "task_reporter" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.okil. All rights reserved." "\0"
             VALUE "OriginalFilename", "task_reporter.exe" "\0"
             VALUE "ProductName", "task_reporter" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

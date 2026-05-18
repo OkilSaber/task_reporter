@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'services/secure_prefs.dart';
 import 'models/category.dart';
 import 'screens/login_screen.dart';
 import 'services/napta_service.dart';
@@ -511,7 +512,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
     // Clear only session-specific data to preserve local comments and credentials
-    await prefs.remove('naptaSession');
+    await SecurePrefs.delete('naptaSession');
     await prefs.remove('dayRecordsData');
     await prefs.remove('dayStatusesData');
     await prefs.remove('categoriesData');
