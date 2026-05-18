@@ -1,0 +1,19 @@
+FROM ubuntu:22.04
+
+# Avoid prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl git unzip xz-utils zip libglu1-mesa \
+    clang cmake ninja-build pkg-config libgtk-3-dev \
+    liblzma-dev libstdc++-12-dev libsecret-1-dev lld llvm
+
+# Install Flutter
+RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
+ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PATH}"
+RUN flutter doctor
+
+WORKDIR /app
+COPY . .
+RUN flutter build linux

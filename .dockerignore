@@ -1,0 +1,16 @@
+.git
+.github
+.gradle
+.idea
+.dart_tool
+build/
+build_linux/
+ios/
+android/
+macos/
+windows/
+web/
+*.dmg
+*.sh
+*.zip
+*.tar.gz

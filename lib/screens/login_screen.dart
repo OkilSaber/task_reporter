@@ -6,7 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/napta_service.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/napta_login_webview.dart';
+import '../widgets/linux_cookie_dialog.dart';
 import '../home_page.dart';
+import 'dart:io';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -62,17 +64,25 @@ class _LoginScreenState extends State<LoginScreen> {
     await prefs.setString('napta_email', email);
     await prefs.setString('napta_password', password);
 
-    if (!mounted) return;
-
-    // Open WebView to get the cookie
-    final String? cookie = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => NaptaLoginWebView(
-        initialEmail: email,
-        initialPassword: password,
-      ),
-    );
+    final String? cookie;
+    if (Platform.isLinux) {
+      if (!mounted) return;
+      cookie = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const LinuxCookieDialog(),
+      );
+    } else {
+      if (!mounted) return;
+      cookie = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => NaptaLoginWebView(
+          initialEmail: email,
+          initialPassword: password,
+        ),
+      );
+    }
 
     if (cookie == null || cookie.isEmpty) {
       setState(() {
