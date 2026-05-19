@@ -51,26 +51,19 @@ Pour soumettre une semaine complète à votre manager, cliquez sur l'icône **Av
 
 ## Installation macOS 🍎💻
 
-- Rendez vous sur la [page de releases](https://github.com/OkilSaber/task_reporter/releases)
-- Téléchargez la dernière version en .dmg
-- Double cliquez sur le .dmg pour lancer l'installation
-- Si un message d'erreur apparaît indiquant que le fichier n'a pas pu être ouvert car il provient d'un développeur non identifié, cliquez sur "Terminé"
-- Ouvrez les Réglages système
-- Allez dans "Confidentialité et sécurité"
-- Tout en bas, cliquez sur "Ouvrir quand même"
-- Cliquez sur "Ouvrir"
-- Tapez votre mot de passe/Utilisez votre empreinte digitale
-- Le DMG s'ouvre
-- Glissez Task Reporter dans le dossier Applications
-- Fermez le DMG
-- Allez dans votre dossier Applications et lancez Task Reporter
-- Si un message d'erreur apparaît indiquant que le fichier n'a pas pu être ouvert car il provient d'un développeur non identifié, cliquez sur "Terminé"
-- Ouvrez les Réglages système
-- Allez dans "Confidentialité et sécurité"
-- Tout en bas, cliquez sur "Ouvrir quand même"
-- Cliquez sur "Ouvrir"
-- Tapez votre mot de passe/Utilisez votre empreinte digitale
-- L'application devrait s'ouvrir d'elle même
+L'application n'étant pas signée avec un certificat développeur payant Apple (build ad-hoc local), macOS bloque son lancement sur les autres ordinateurs pour des raisons de sécurité.
+
+Pour que votre collègue puisse l'exécuter, demandez-lui d'ouvrir son **Terminal** et de lancer les deux commandes suivantes :
+
+```bash
+# 1. Enlever la quarantaine de téléchargement
+xattr -cr /Applications/Task\ Reporter.app
+
+# 2. Re-signer l'application localement sur sa machine
+codesign --force --deep --sign - /Applications/Task\ Reporter.app
+```
+
+Ensuite, l'application pourra être lancée directement depuis le dossier Applications !
 
 ## 🚀 Installation (Développement)
 

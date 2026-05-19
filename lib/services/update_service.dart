@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class UpdateService {
-  static const String currentVersion = '1.1.1';
+  static const String currentVersion = '1.2.1';
   static const String _releasesUrl =
       'https://api.github.com/repos/OkilSaber/task_reporter/releases/latest';
 
@@ -16,7 +16,9 @@ class UpdateService {
     final parts1 = v1.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     final parts2 = v2.split('.').map((e) => int.tryParse(e) ?? 0).toList();
 
-    final length = parts1.length > parts2.length ? parts1.length : parts2.length;
+    final length = parts1.length > parts2.length
+        ? parts1.length
+        : parts2.length;
     for (int i = 0; i < length; i++) {
       final val1 = i < parts1.length ? parts1[i] : 0;
       final val2 = i < parts2.length ? parts2[i] : 0;
