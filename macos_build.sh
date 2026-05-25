@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+rm *.dmg
+
 APP="build/macos/Build/Products/Release/Task Reporter.app"
 ENTITLEMENTS="macos/Runner/Release.entitlements"
 
