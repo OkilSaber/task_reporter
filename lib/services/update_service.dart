@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class UpdateService {
-  static const String currentVersion = '1.3.0';
+  static const String currentVersion = '1.3.1';
   static const String _releasesUrl =
       'https://api.github.com/repos/OkilSaber/task_reporter/releases/latest';
 
