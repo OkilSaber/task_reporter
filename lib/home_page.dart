@@ -38,6 +38,7 @@ class _HomePageState extends State<HomePage> {
   bool _isSyncing = false;
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
+  String? _hoveredCategoryId;
   final Set<String> _fetchedMonths = {}; // 'yyyy-MM' keys already fetched
   final Set<String> _modifiedDates =
       {}; // track days changed but not yet saved to Napta
@@ -749,18 +750,18 @@ class _HomePageState extends State<HomePage> {
     final existingIds = existing.map((c) => c['id'] as String).toSet();
 
     const palette = [
-      0xFF4FC3F7,
-      0xFF81C784,
-      0xFFFFB74D,
-      0xFFE57373,
-      0xFFBA68C8,
-      0xFF4DB6AC,
-      0xFFF06292,
-      0xFFFFD54F,
-      0xFF64B5F6,
-      0xFFA5D6A7,
-      0xFFFF8A65,
-      0xFF90A4AE,
+      0xFF4FC3F7, // light blue
+      0xFF81C784, // light green
+      0xFFFFD54F, // amber
+      0xFFD32F2F, // deep red
+      0xFFBA68C8, // purple
+      0xFF26A69A, // teal
+      0xFFAD1457, // dark pink
+      0xFF1976D2, // strong blue
+      0xFF7E57C2, // deep purple
+      0xFF388E3C, // dark green
+      0xFF5D4037, // brown
+      0xFF263238, // near-black
     ];
 
     bool changed = false;
@@ -796,6 +797,173 @@ class _HomePageState extends State<HomePage> {
       if (!existingIds.contains(cat['id'])) existing.add(cat);
     }
     await prefs.setString('categoriesData', jsonEncode(existing));
+  }
+
+  Widget _buildMonthSummary() {
+    final Map<String, double> categoryTotals = {};
+    double grandTotal = 0;
+
+    _dayRecords.forEach((key, dayMap) {
+      try {
+        final date = DateFormat('yyyy-MM-dd').parse(key);
+        if (date.year == _currentMonth.year &&
+            date.month == _currentMonth.month) {
+          dayMap.forEach((catId, val) {
+            if (val > 0) {
+              categoryTotals[catId] = (categoryTotals[catId] ?? 0) + val;
+              grandTotal += val;
+            }
+          });
+        }
+      } catch (_) {
+        // Ignore parsing errors for safety
+      }
+    });
+
+    if (categoryTotals.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final sortedEntries = categoryTotals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Row(
+      children: [
+        const SizedBox(width: 24),
+        GlassContainer(
+          padding: const EdgeInsets.all(24),
+          borderRadius: BorderRadius.circular(32),
+          child: SizedBox(
+            width: 260,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.pie_chart_outline,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      'Récapitulatif',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.only(right: 12),
+                    itemCount: sortedEntries.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final entry = sortedEntries[index];
+                      final category = _categories.firstWhere(
+                        (c) => c.id == entry.key,
+                        orElse: () => Category(
+                          id: entry.key,
+                          name: 'Catégorie inconnue',
+                          color: const Color(0xFF9E9E9E),
+                        ),
+                      );
+                      final isHovered = _hoveredCategoryId == category.id;
+
+                      return MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        onEnter: (_) =>
+                            setState(() => _hoveredCategoryId = category.id),
+                        onExit: (_) =>
+                            setState(() => _hoveredCategoryId = null),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isHovered
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: category.color,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  category.name,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white,
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '${entry.value.toStringAsFixed(2)} j',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const Divider(color: Colors.white24, height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total mensuel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      '${grandTotal.toStringAsFixed(2)} j',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -859,7 +1027,7 @@ class _HomePageState extends State<HomePage> {
           SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1000),
+                constraints: const BoxConstraints(maxWidth: 1300),
                 child: Padding(
                   padding: const EdgeInsets.all(32.0),
                   child: Column(
@@ -1091,11 +1259,11 @@ class _HomePageState extends State<HomePage> {
                                 ),
                                 const Spacer(),
                                 Text(
-                                  'Total : ${_currentMonthTotal.toStringAsFixed(2)} JH',
+                                  'Jours travaillés : ${_currentMonthTotal.toStringAsFixed(2)} JH',
                                   style: const TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.white70,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ],
@@ -1104,20 +1272,31 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Calendar
+                      // Calendar and Summary
                       Expanded(
-                        child: GlassContainer(
-                          padding: const EdgeInsets.all(24),
-                          borderRadius: BorderRadius.circular(32),
-                          child: CalendarGrid(
-                            currentMonth: _currentMonth,
-                            dayRecords: _dayRecords,
-                            dayStatuses: _dayStatuses,
-                            dayComments: _dayComments,
-                            categories: _categories,
-                            onDayDataChanged: _onDayDataChanged,
-                            onSubmitWeek: _submitWeekForApproval,
-                          ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Calendar
+                            Expanded(
+                              child: GlassContainer(
+                                padding: const EdgeInsets.all(24),
+                                borderRadius: BorderRadius.circular(32),
+                                child: CalendarGrid(
+                                  currentMonth: _currentMonth,
+                                  dayRecords: _dayRecords,
+                                  dayStatuses: _dayStatuses,
+                                  dayComments: _dayComments,
+                                  categories: _categories,
+                                  highlightedCategoryId: _hoveredCategoryId,
+                                  onDayDataChanged: _onDayDataChanged,
+                                  onSubmitWeek: _submitWeekForApproval,
+                                ),
+                              ),
+                            ),
+                            // Month Summary
+                            _buildMonthSummary(),
+                          ],
                         ),
                       ),
                     ],

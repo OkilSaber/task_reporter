@@ -128,6 +128,7 @@ class _ProjectSearchDialogState extends State<ProjectSearchDialog> {
                                 ),
                               )
                             : ListView.separated(
+                                padding: const EdgeInsets.only(right: 12),
                                 itemCount: _results.length,
                                 separatorBuilder: (context, index) =>
                                     const Divider(color: Colors.white10),

@@ -23,23 +23,42 @@ class CategoryManagerDialog extends StatefulWidget {
 class _CategoryManagerDialogState extends State<CategoryManagerDialog> {
   late List<Category> _localCategories;
 
-  final List<Color> _availableColors = [
-    Colors.greenAccent,
-    Colors.blueAccent,
-    Colors.purpleAccent,
-    Colors.orangeAccent,
-    Colors.redAccent,
-    Colors.pinkAccent,
-    Colors.cyanAccent,
-    Colors.yellowAccent,
+  final List<Color> _availableColors = const [
+    Color(0xFF4FC3F7), // light blue
+    Color(0xFF1976D2), // strong blue
+    Color(0xFF26A69A), // teal
+    Color(0xFF81C784), // light green
+    Color(0xFF388E3C), // dark green
+    Color(0xFFFFD54F), // amber
+    Color(0xFFD32F2F), // deep red
+    Color(0xFFAD1457), // dark pink
+    Color(0xFFBA68C8), // purple
+    Color(0xFF7E57C2), // deep purple
+    Color(0xFF5D4037), // brown
+    Color(0xFF263238), // near-black
   ];
 
   @override
   void initState() {
     super.initState();
     _localCategories = widget.categories
-        .map((c) => Category(id: c.id, name: c.name, color: c.color))
+        .map((c) => Category(
+              id: c.id,
+              name: c.name,
+              color: c.color,
+              isLocked: c.isLocked,
+              isHidden: c.isHidden,
+              isFavorite: c.isFavorite,
+            ))
         .toList();
+    _sortCategories();
+  }
+
+  void _sortCategories() {
+    _localCategories.sort((a, b) {
+      if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+      return 0;
+    });
   }
 
   Future<void> _addCategory() async {
@@ -66,8 +85,22 @@ class _CategoryManagerDialogState extends State<CategoryManagerDialog> {
           name: '$prefix${selectedProject['name']}',
           color: _availableColors[_localCategories.length % _availableColors.length],
         ));
+        _sortCategories();
       });
     }
+  }
+
+  void _toggleFavorite(int index) {
+    setState(() {
+      _localCategories[index].isFavorite = !_localCategories[index].isFavorite;
+      _sortCategories();
+    });
+  }
+
+  void _toggleHidden(int index) {
+    setState(() {
+      _localCategories[index].isHidden = !_localCategories[index].isHidden;
+    });
   }
 
   void _removeCategory(int index) {
@@ -110,46 +143,84 @@ class _CategoryManagerDialogState extends State<CategoryManagerDialog> {
               Flexible(
                 child: ListView.separated(
                   shrinkWrap: true,
+                  padding: const EdgeInsets.only(right: 12),
                   itemCount: _localCategories.length,
                   separatorBuilder: (c, i) => const Divider(color: Colors.white24),
                   itemBuilder: (context, index) {
                     final cat = _localCategories[index];
+                    final nameColor = cat.isHidden ? Colors.white38 : Colors.white;
                     return Row(
                       children: [
                         GestureDetector(
-                          onTap: () {
-                            _showColorPicker(index);
-                          },
-                          child: Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: cat.color,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                          onTap: cat.isLocked ? null : () => _showColorPicker(index),
+                          child: Opacity(
+                            opacity: cat.isHidden ? 0.4 : 1.0,
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: cat.color,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: TextFormField(
-                            initialValue: cat.name,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
-                              hintText: 'Nom de la catégorie',
-                              hintStyle: TextStyle(color: Colors.white54),
-                            ),
-                            onChanged: (val) {
-                              cat.name = val;
-                            },
-                          ),
+                          child: cat.isLocked
+                              ? Text(
+                                  cat.name,
+                                  style: TextStyle(
+                                    color: nameColor,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                              : TextFormField(
+                                  initialValue: cat.name,
+                                  style: TextStyle(color: nameColor),
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    border: InputBorder.none,
+                                    hintText: 'Nom de la catégorie',
+                                    hintStyle: TextStyle(color: Colors.white54),
+                                  ),
+                                  onChanged: (val) {
+                                    cat.name = val;
+                                  },
+                                ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.white54),
-                          onPressed: () => _removeCategory(index),
+                          tooltip: cat.isFavorite
+                              ? 'Retirer des favoris'
+                              : 'Ajouter aux favoris',
+                          icon: Icon(
+                            cat.isFavorite ? Icons.star : Icons.star_border,
+                            color: cat.isFavorite
+                                ? Colors.amberAccent
+                                : Colors.white54,
+                          ),
+                          onPressed: () => _toggleFavorite(index),
                         ),
+                        IconButton(
+                          tooltip: cat.isHidden ? 'Afficher' : 'Masquer',
+                          icon: Icon(
+                            cat.isHidden
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: cat.isHidden
+                                ? Colors.white38
+                                : Colors.white54,
+                          ),
+                          onPressed: () => _toggleHidden(index),
+                        ),
+                        if (!cat.isLocked)
+                          IconButton(
+                            tooltip: 'Supprimer',
+                            icon: const Icon(Icons.delete, color: Colors.white54),
+                            onPressed: () => _removeCategory(index),
+                          ),
                       ],
                     );
                   },

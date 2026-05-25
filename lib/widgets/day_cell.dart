@@ -11,6 +11,7 @@ class DayCell extends StatelessWidget {
   final String? dayComment;
   final Function(Map<String, double>, String) onChanged;
   final String? status;
+  final String? highlightedCategoryId;
 
   const DayCell({
     super.key,
@@ -22,6 +23,7 @@ class DayCell extends StatelessWidget {
     required this.onChanged,
     this.dayComment,
     this.status,
+    this.highlightedCategoryId,
   });
 
   @override
@@ -31,16 +33,24 @@ class DayCell extends StatelessWidget {
     final hasStatus = status != null && status != 'prefilled';
     final isWeekend =
         date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+    final hasComment = dayComment != null && dayComment!.isNotEmpty;
+    final canShowValidatedDetails = isLocked && hasComment;
+    final isClickable =
+        !isWeekend && (!isLocked || canShowValidatedDetails);
 
     return MouseRegion(
-      cursor: (isLocked || isWeekend)
-          ? SystemMouseCursors.basic
-          : SystemMouseCursors.click,
+      cursor: isClickable
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       child: GestureDetector(
-        onTap: (isLocked || isWeekend)
+        onTap: !isClickable
             ? null
             : () {
-                _showValuePicker(context);
+                if (isLocked) {
+                  _showValidatedDayDialog(context);
+                } else {
+                  _showValuePicker(context);
+                }
               },
         child: GlassContainer(
           blur: 10,
@@ -93,11 +103,11 @@ class DayCell extends StatelessWidget {
                             if (dayComment != null && dayComment!.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(right: 6),
-                                child: Tooltip(
+                                child: const Tooltip(
                                   message: 'Un commentaire est disponible',
                                   child: Icon(
                                     Icons.sticky_note_2_rounded,
-                                    color: Colors.white.withValues(alpha: 0.6),
+                                    color: Colors.white,
                                     size: 14,
                                   ),
                                 ),
@@ -165,14 +175,18 @@ class DayCell extends StatelessWidget {
       ));
     }
 
+    final hasHighlight = highlightedCategoryId != null;
     for (var cat in categories) {
       final val = dayRecords[cat.id] ?? 0.0;
       if (val > 0) {
+        final isHighlighted = cat.id == highlightedCategoryId;
+        final alpha = hasHighlight ? (isHighlighted ? 1.0 : 0.15) : 0.7;
         bars.add(Flexible(
           flex: (val * 100).toInt(),
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
             width: double.infinity,
-            color: cat.color.withValues(alpha: 0.7),
+            color: cat.color.withValues(alpha: alpha),
           ),
         ));
       }
@@ -255,6 +269,121 @@ class DayCell extends StatelessWidget {
     );
   }
 
+  void _showValidatedDayDialog(BuildContext context) {
+    final filledCats = categories
+        .where((c) => (dayRecords[c.id] ?? 0) > 0)
+        .toList();
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: GlassContainer(
+          padding: const EdgeInsets.all(24),
+          borderRadius: BorderRadius.circular(28),
+          child: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.verified_rounded,
+                      color: Colors.greenAccent.withValues(alpha: 0.85),
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Journée validée',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ...filledCats.map((c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: c.color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              c.name,
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                          Text(
+                            '${(dayRecords[c.id] ?? 0).toStringAsFixed(2)} JH',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+                if (dayComment != null && dayComment!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  const Divider(color: Colors.white24),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Commentaire',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      dayComment!,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text(
+                      'Fermer',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showLockedInfoDialog(BuildContext context, List<Category> locked) {
     showDialog(
       context: context,
@@ -292,6 +421,10 @@ class DayCell extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: c.color,
                                   shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    width: 1,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -379,7 +512,15 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
   @override
   Widget build(BuildContext context) {
     final locked = widget.categories.where((c) => c.isLocked).toList();
-    final editable = widget.categories.where((c) => !c.isLocked).toList();
+    final editable = widget.categories
+        .where((c) =>
+            !c.isLocked &&
+            (!c.isHidden || (_currentRecords[c.id] ?? 0) > 0))
+        .toList()
+      ..sort((a, b) {
+        if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+        return 0;
+      });
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -414,6 +555,7 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
               Flexible(
                 child: ListView(
                   shrinkWrap: true,
+                  padding: const EdgeInsets.only(right: 12),
                   children: [
                     // ── Locked (read-only) entries ──────────────────────
                     ...locked
@@ -505,6 +647,10 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
             decoration: BoxDecoration(
               color: cat.color,
               shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.6),
+                width: 1,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -551,6 +697,10 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
               ),
             ),
             const SizedBox(width: 8),
+            if (cat.isFavorite) ...[
+              const Icon(Icons.star, size: 14, color: Colors.amberAccent),
+              const SizedBox(width: 6),
+            ],
             Expanded(
               child: Text(
                 cat.name,

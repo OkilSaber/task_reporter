@@ -9,6 +9,7 @@ class CalendarGrid extends StatelessWidget {
   final Map<String, String> dayStatuses;
   final Map<String, String> dayComments;
   final List<Category> categories;
+  final String? highlightedCategoryId;
   final Function(DateTime, Map<String, double>, String) onDayDataChanged;
   final Function(DateTime) onSubmitWeek;
 
@@ -19,6 +20,7 @@ class CalendarGrid extends StatelessWidget {
     required this.dayStatuses,
     required this.dayComments,
     required this.categories,
+    this.highlightedCategoryId,
     required this.onDayDataChanged,
     required this.onSubmitWeek,
   });
@@ -106,6 +108,7 @@ class CalendarGrid extends StatelessWidget {
         // Grid Rows
         Expanded(
           child: ListView.separated(
+            padding: const EdgeInsets.only(right: 8),
             itemCount: weeks.length,
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
@@ -200,6 +203,7 @@ class CalendarGrid extends StatelessWidget {
       dayComment: dayComments[dateStr],
       status: dayStatuses[dateStr],
       categories: categories,
+      highlightedCategoryId: highlightedCategoryId,
       onChanged: (newRecords, newComment) {
         onDayDataChanged(date, newRecords, newComment);
       },
