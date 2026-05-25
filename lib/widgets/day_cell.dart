@@ -33,10 +33,7 @@ class DayCell extends StatelessWidget {
     final hasStatus = status != null && status != 'prefilled';
     final isWeekend =
         date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
-    final hasComment = dayComment != null && dayComment!.isNotEmpty;
-    final canShowValidatedDetails = isLocked && hasComment;
-    final isClickable =
-        !isWeekend && (!isLocked || canShowValidatedDetails);
+    final isClickable = !isWeekend;
 
     return MouseRegion(
       cursor: isClickable
