@@ -31,9 +31,7 @@ class _HomePageState extends State<HomePage> {
     1,
   );
 
-  List<Category> _categories = [
-    Category(id: 'default', name: 'Défaut', color: Colors.greenAccent),
-  ];
+  List<Category> _categories = [];
   Map<String, Map<String, double>> _dayRecords = {}; // dateStr -> catId -> val
   Map<String, String> _dayStatuses = {}; // dateStr -> status
   final Map<String, String> _dayComments = {}; // dateStr -> comment
@@ -41,7 +39,8 @@ class _HomePageState extends State<HomePage> {
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
   final Set<String> _fetchedMonths = {}; // 'yyyy-MM' keys already fetched
-  final Set<String> _modifiedDates = {}; // track days changed but not yet saved to Napta
+  final Set<String> _modifiedDates =
+      {}; // track days changed but not yet saved to Napta
 
   late SharedPreferences _prefs;
   Timer? _todayTimer;

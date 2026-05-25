@@ -48,15 +48,17 @@ class UpdateService {
           if (compareVersions(latestVersion, currentVersion) > 0) {
             // Find download link (e.g. DMG asset or release HTML URL)
             String? downloadUrl;
-            final assets = data['assets'] as List<dynamic>? ?? [];
-            for (final asset in assets) {
-              final name = (asset['name'] ?? '').toString();
-              if (name.endsWith('.dmg')) {
-                downloadUrl = (asset['browser_download_url'] ?? '').toString();
-                break;
+            if (!Platform.isLinux) {
+              final assets = data['assets'] as List<dynamic>? ?? [];
+              for (final asset in assets) {
+                final name = (asset['name'] ?? '').toString();
+                if (name.endsWith('.dmg')) {
+                  downloadUrl = (asset['browser_download_url'] ?? '').toString();
+                  break;
+                }
               }
             }
-            // Fallback to the release page HTML URL if no DMG asset is found
+            // On Linux (or if no matching asset is found), open the release page
             downloadUrl ??= (data['html_url'] ?? '').toString();
 
             return {
