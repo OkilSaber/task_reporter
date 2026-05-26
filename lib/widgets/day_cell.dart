@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../models/category.dart';
 import 'glass_container.dart';
@@ -11,7 +12,7 @@ class DayCell extends StatelessWidget {
   final String? dayComment;
   final Function(Map<String, double>, String) onChanged;
   final String? status;
-  final String? highlightedCategoryId;
+  final ValueListenable<String?>? highlightedCategory;
 
   const DayCell({
     super.key,
@@ -23,7 +24,7 @@ class DayCell extends StatelessWidget {
     required this.onChanged,
     this.dayComment,
     this.status,
-    this.highlightedCategoryId,
+    this.highlightedCategory,
   });
 
   @override
@@ -65,10 +66,18 @@ class DayCell extends StatelessWidget {
               Positioned.fill(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: _buildStackedBars(),
-                  ),
+                  child: highlightedCategory == null
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: _buildStackedBars(null),
+                        )
+                      : ValueListenableBuilder<String?>(
+                          valueListenable: highlightedCategory!,
+                          builder: (context, hovered, _) => Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: _buildStackedBars(hovered),
+                          ),
+                        ),
                 ),
               ),
               Padding(
@@ -152,7 +161,7 @@ class DayCell extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildStackedBars() {
+  List<Widget> _buildStackedBars(String? highlightedId) {
     List<Widget> bars = [];
     double totalFlex = 1.0;
     double currentUsed = 0.0;
@@ -172,19 +181,24 @@ class DayCell extends StatelessWidget {
       ));
     }
 
-    final hasHighlight = highlightedCategoryId != null;
+    final hasHighlight = highlightedId != null;
     for (var cat in categories) {
       final val = dayRecords[cat.id] ?? 0.0;
       if (val > 0) {
-        final isHighlighted = cat.id == highlightedCategoryId;
+        final isHighlighted = cat.id == highlightedId;
         final alpha = hasHighlight ? (isHighlighted ? 1.0 : 0.15) : 0.7;
         bars.add(Flexible(
           flex: (val * 100).toInt(),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: double.infinity,
-            color: cat.color.withValues(alpha: alpha),
-          ),
+          child: hasHighlight
+              ? AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: double.infinity,
+                  color: cat.color.withValues(alpha: alpha),
+                )
+              : Container(
+                  width: double.infinity,
+                  color: cat.color.withValues(alpha: alpha),
+                ),
         ));
       }
     }

@@ -150,6 +150,7 @@ class _CategoryManagerDialogState extends State<CategoryManagerDialog> {
                     final cat = _localCategories[index];
                     final nameColor = cat.isHidden ? Colors.white38 : Colors.white;
                     return Row(
+                      key: ValueKey(cat.id),
                       children: [
                         GestureDetector(
                           onTap: cat.isLocked ? null : () => _showColorPicker(index),

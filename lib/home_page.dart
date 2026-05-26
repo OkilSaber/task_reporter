@@ -38,7 +38,7 @@ class _HomePageState extends State<HomePage> {
   bool _isSyncing = false;
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
-  String? _hoveredCategoryId;
+  final ValueNotifier<String?> _hoveredCategoryId = ValueNotifier(null);
   final Set<String> _fetchedMonths = {}; // 'yyyy-MM' keys already fetched
   final Set<String> _modifiedDates =
       {}; // track days changed but not yet saved to Napta
@@ -59,6 +59,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _todayTimer?.cancel();
+    _hoveredCategoryId.dispose();
     super.dispose();
   }
 
@@ -74,9 +75,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _startTodayTimer() {
-    // Rebuild the UI every minute to ensure the "today" indicator updates if midnight passes
+    // Only rebuild when the calendar day actually rolls over (midnight),
+    // not every minute — full-tree setState is expensive.
+    var lastDay = DateUtils.dateOnly(DateTime.now());
     _todayTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      final today = DateUtils.dateOnly(DateTime.now());
+      if (today != lastDay) {
+        lastDay = today;
+        setState(() {});
+      }
     });
   }
 
@@ -87,7 +95,9 @@ class _HomePageState extends State<HomePage> {
     final catsData = _prefs.getString('categoriesData');
     if (catsData != null) {
       final List<dynamic> decodedCats = jsonDecode(catsData);
-      _categories = decodedCats.map((c) => Category.fromJson(c)).toList();
+      setState(() {
+        _categories = decodedCats.map((c) => Category.fromJson(c)).toList();
+      });
     }
 
     // Load records
@@ -193,11 +203,11 @@ class _HomePageState extends State<HomePage> {
         return CategoryManagerDialog(
           categories: _categories,
           naptaService: service,
-          onCategoriesChanged: (newCats) {
+          onCategoriesChanged: (newCats) async {
             setState(() {
               _categories = newCats;
             });
-            _saveData();
+            await _saveData();
           },
         );
       },
@@ -256,28 +266,33 @@ class _HomePageState extends State<HomePage> {
         month: month.month,
       );
 
-      // Merge — other months’ records stay intact
+      // Merge — other months’ records stay intact. Track whether anything new
+      // actually changed so we can skip the (expensive) full re-encode + write.
+      bool recordsChanged = false;
+      bool statusesChanged = false;
+      data.records.forEach((k, v) {
+        if (_dayRecords[k] != v) recordsChanged = true;
+      });
+      data.statuses.forEach((k, v) {
+        if (_dayStatuses[k] != v) statusesChanged = true;
+      });
+
       setState(() {
         _dayRecords.addAll(data.records);
         _dayStatuses.addAll(data.statuses);
         _fetchedMonths.add(monthKey);
       });
 
-      // Persist merged data
-      await _prefs.setString('dayRecordsData', jsonEncode(_dayRecords));
-      await _prefs.setString('dayStatusesData', jsonEncode(_dayStatuses));
+      // Only re-encode/write the (potentially large) maps when something changed.
+      if (recordsChanged) {
+        await _prefs.setString('dayRecordsData', jsonEncode(_dayRecords));
+      }
+      if (statusesChanged) {
+        await _prefs.setString('dayStatusesData', jsonEncode(_dayStatuses));
+      }
 
       // Merge any new locked holiday categories
       await _mergeLockedCategories(data.records);
-
-      // Reload categories in case new locked cats were added
-      final catsData = _prefs.getString('categoriesData');
-      if (catsData != null && mounted) {
-        final decoded = jsonDecode(catsData) as List<dynamic>;
-        setState(() {
-          _categories = decoded.map((c) => Category.fromJson(c)).toList();
-        });
-      }
     } catch (e) {
       // Error ignored
     } finally {
@@ -738,16 +753,10 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  static Future<void> _saveProjectsAsCategories(
+  Future<void> _saveProjectsAsCategories(
     List<Map<String, dynamic>> projects,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
-    final existingData = prefs.getString('categoriesData');
-    List<dynamic> existing = [];
-    if (existingData != null) {
-      existing = jsonDecode(existingData) as List<dynamic>;
-    }
-    final existingIds = existing.map((c) => c['id'] as String).toSet();
+    final existingIds = _categories.map((c) => c.id).toSet();
 
     const palette = [
       0xFF4FC3F7, // light blue
@@ -764,39 +773,43 @@ class _HomePageState extends State<HomePage> {
       0xFF263238, // near-black
     ];
 
-    bool changed = false;
+    final newCats = <Category>[];
     for (final p in projects) {
       final id = 'napta_${p['id']}';
       if (!existingIds.contains(id)) {
         final prefix = p['client_name'] != null ? '${p['client_name']} – ' : '';
-        existing.add({
-          'id': id,
-          'name': '$prefix${p['name']}',
-          'color': palette[existing.length % palette.length],
-        });
-        changed = true;
+        newCats.add(Category(
+          id: id,
+          name: '$prefix${p['name']}',
+          color: Color(palette[(_categories.length + newCats.length) % palette.length]),
+        ));
       }
     }
 
-    if (changed) {
-      await prefs.setString('categoriesData', jsonEncode(existing));
+    if (newCats.isNotEmpty) {
+      setState(() => _categories.addAll(newCats));
+      await _saveData();
     }
   }
 
-  /// Appends locked holiday categories (bank holidays, congés) to categoriesData.
-  static Future<void> _mergeLockedCategories(
+  /// Appends locked holiday categories (bank holidays, congés) to the
+  /// in-memory categories list, preserving any user-set flags on existing entries.
+  Future<void> _mergeLockedCategories(
     Map<String, Map<String, double>> dayRecords,
   ) async {
     final locked = NaptaService.buildLockedCategories(dayRecords);
     if (locked.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    final existing =
-        jsonDecode(prefs.getString('categoriesData') ?? '[]') as List<dynamic>;
-    final existingIds = existing.map((c) => c['id'] as String).toSet();
+    final existingIds = _categories.map((c) => c.id).toSet();
+    final newCats = <Category>[];
     for (final cat in locked) {
-      if (!existingIds.contains(cat['id'])) existing.add(cat);
+      if (!existingIds.contains(cat['id'])) {
+        newCats.add(Category.fromJson(cat));
+      }
     }
-    await prefs.setString('categoriesData', jsonEncode(existing));
+    if (newCats.isNotEmpty) {
+      setState(() => _categories.addAll(newCats));
+      await _saveData();
+    }
   }
 
   Widget _buildMonthSummary() {
@@ -873,26 +886,29 @@ class _HomePageState extends State<HomePage> {
                           color: const Color(0xFF9E9E9E),
                         ),
                       );
-                      final isHovered = _hoveredCategoryId == category.id;
-
                       return MouseRegion(
                         cursor: SystemMouseCursors.click,
                         onEnter: (_) =>
-                            setState(() => _hoveredCategoryId = category.id),
-                        onExit: (_) =>
-                            setState(() => _hoveredCategoryId = null),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isHovered
-                                ? Colors.white.withValues(alpha: 0.1)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                            _hoveredCategoryId.value = category.id,
+                        onExit: (_) => _hoveredCategoryId.value = null,
+                        child: ValueListenableBuilder<String?>(
+                          valueListenable: _hoveredCategoryId,
+                          builder: (context, hovered, child) {
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: hovered == category.id
+                                    ? Colors.white.withValues(alpha: 0.1)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: child,
+                            );
+                          },
                           child: Row(
                             children: [
                               Container(
@@ -1288,7 +1304,7 @@ class _HomePageState extends State<HomePage> {
                                   dayStatuses: _dayStatuses,
                                   dayComments: _dayComments,
                                   categories: _categories,
-                                  highlightedCategoryId: _hoveredCategoryId,
+                                  highlightedCategory: _hoveredCategoryId,
                                   onDayDataChanged: _onDayDataChanged,
                                   onSubmitWeek: _submitWeekForApproval,
                                 ),

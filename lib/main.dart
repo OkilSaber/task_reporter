@@ -130,29 +130,32 @@ class _SplashRouterState extends State<_SplashRouter> {
     const palette = [
       0xFF4FC3F7,
       0xFF81C784,
-      0xFFFFB74D,
-      0xFFE57373,
-      0xFFBA68C8,
-      0xFF4DB6AC,
-      0xFFF06292,
       0xFFFFD54F,
-      0xFF64B5F6,
-      0xFFA5D6A7,
-      0xFFFF8A65,
-      0xFF90A4AE,
+      0xFFD32F2F,
+      0xFFBA68C8,
+      0xFF26A69A,
+      0xFFAD1457,
+      0xFF1976D2,
+      0xFF7E57C2,
+      0xFF388E3C,
+      0xFF5D4037,
+      0xFF263238,
     ];
-    final categories = projects.asMap().entries.map((entry) {
-      final i = entry.key;
-      final p = entry.value;
-      final prefix = p['client_name'] != null ? '${p['client_name']} – ' : '';
-      return {
-        'id': 'napta_${p['id']}',
-        'name': '$prefix${p['name']}',
-        'color': palette[i % palette.length],
-      };
-    }).toList();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('categoriesData', jsonEncode(categories));
+    final existing =
+        jsonDecode(prefs.getString('categoriesData') ?? '[]') as List<dynamic>;
+    final existingIds = existing.map((c) => c['id'] as String).toSet();
+    for (final p in projects) {
+      final id = 'napta_${p['id']}';
+      if (existingIds.contains(id)) continue;
+      final prefix = p['client_name'] != null ? '${p['client_name']} – ' : '';
+      existing.add({
+        'id': id,
+        'name': '$prefix${p['name']}',
+        'color': palette[existing.length % palette.length],
+      });
+    }
+    await prefs.setString('categoriesData', jsonEncode(existing));
   }
 
   static Future<void> _mergeLockedCategories(

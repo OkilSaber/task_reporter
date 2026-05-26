@@ -163,39 +163,42 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// Convert a list of Napta projects to Category JSON and persist to cache.
+  /// Merge a list of Napta projects into the cached categoriesData,
+  /// preserving any existing user-set flags (isFavorite, isHidden) on entries
+  /// that are already present.
   static Future<void> _saveProjectsAsCategories(
       List<Map<String, dynamic>> projects) async {
-    // A palette of visually distinct, vibrant colors
     const palette = [
       0xFF4FC3F7, // light blue
-      0xFF81C784, // green
-      0xFFFFB74D, // orange
-      0xFFE57373, // red
-      0xFFBA68C8, // purple
-      0xFF4DB6AC, // teal
-      0xFFF06292, // pink
+      0xFF81C784, // light green
       0xFFFFD54F, // amber
-      0xFF64B5F6, // blue
-      0xFFA5D6A7, // light green
-      0xFFFF8A65, // deep orange
-      0xFF90A4AE, // blue grey
+      0xFFD32F2F, // deep red
+      0xFFBA68C8, // purple
+      0xFF26A69A, // teal
+      0xFFAD1457, // dark pink
+      0xFF1976D2, // strong blue
+      0xFF7E57C2, // deep purple
+      0xFF388E3C, // dark green
+      0xFF5D4037, // brown
+      0xFF263238, // near-black
     ];
 
-    final categories = projects.asMap().entries.map((entry) {
-      final i = entry.key;
-      final p = entry.value;
+    final prefs = await SharedPreferences.getInstance();
+    final existing =
+        jsonDecode(prefs.getString('categoriesData') ?? '[]') as List<dynamic>;
+    final existingIds = existing.map((c) => c['id'] as String).toSet();
+    for (final p in projects) {
+      final id = 'napta_${p['id']}';
+      if (existingIds.contains(id)) continue;
       final clientPrefix =
           p['client_name'] != null ? '${p['client_name']} – ' : '';
-      return {
-        'id': 'napta_${p['id']}',
+      existing.add({
+        'id': id,
         'name': '$clientPrefix${p['name']}',
-        'color': palette[i % palette.length],
-      };
-    }).toList();
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('categoriesData', jsonEncode(categories));
+        'color': palette[existing.length % palette.length],
+      });
+    }
+    await prefs.setString('categoriesData', jsonEncode(existing));
   }
 
   static Future<void> _mergeLockedCategories(

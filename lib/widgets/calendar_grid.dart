@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/category.dart';
@@ -9,7 +10,7 @@ class CalendarGrid extends StatelessWidget {
   final Map<String, String> dayStatuses;
   final Map<String, String> dayComments;
   final List<Category> categories;
-  final String? highlightedCategoryId;
+  final ValueListenable<String?>? highlightedCategory;
   final Function(DateTime, Map<String, double>, String) onDayDataChanged;
   final Function(DateTime) onSubmitWeek;
 
@@ -20,7 +21,7 @@ class CalendarGrid extends StatelessWidget {
     required this.dayStatuses,
     required this.dayComments,
     required this.categories,
-    this.highlightedCategoryId,
+    this.highlightedCategory,
     required this.onDayDataChanged,
     required this.onSubmitWeek,
   });
@@ -203,7 +204,7 @@ class CalendarGrid extends StatelessWidget {
       dayComment: dayComments[dateStr],
       status: dayStatuses[dateStr],
       categories: categories,
-      highlightedCategoryId: highlightedCategoryId,
+      highlightedCategory: highlightedCategory,
       onChanged: (newRecords, newComment) {
         onDayDataChanged(date, newRecords, newComment);
       },
