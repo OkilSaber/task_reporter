@@ -57,6 +57,9 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Link CEF library for flutter_linux_webview
+include(flutter/ephemeral/.plugin_symlinks/flutter_linux_webview/linux/cmake/link_to_cef_library.cmake)
+
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
@@ -125,4 +128,4 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
-endif()
+endif()

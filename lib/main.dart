@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_linux_webview/flutter_linux_webview.dart';
 import 'services/secure_prefs.dart';
 import 'home_page.dart';
 import 'screens/login_screen.dart';
@@ -11,6 +15,16 @@ import 'services/napta_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr', null);
+
+  if (Platform.isLinux) {
+    debugPrint('Linux detected');
+    await LinuxWebViewPlugin.initialize(options: <String, String?>{
+      'no-sandbox': null,
+    });
+    debugPrint('Linux WebView initialized');
+    WebView.platform = LinuxWebView();
+  }
+
   runApp(const MyApp());
 }
 
@@ -40,11 +54,27 @@ class _SplashRouter extends StatefulWidget {
   State<_SplashRouter> createState() => _SplashRouterState();
 }
 
-class _SplashRouterState extends State<_SplashRouter> {
+class _SplashRouterState extends State<_SplashRouter>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _route();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    if (Platform.isLinux) {
+      await LinuxWebViewPlugin.terminate();
+    }
+    return AppExitResponse.exit;
   }
 
   Future<void> _route() async {

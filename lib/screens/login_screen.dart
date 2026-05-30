@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -6,10 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/napta_service.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/napta_login_webview.dart';
-import '../widgets/linux_cookie_dialog.dart';
+import '../widgets/napta_login_webview_linux.dart';
 import '../services/secure_prefs.dart';
 import '../home_page.dart';
-import 'dart:io';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -63,16 +63,18 @@ class _LoginScreenState extends State<LoginScreen> {
     await SecurePrefs.write('napta_email', email);
     await SecurePrefs.write('napta_password', password);
 
+    if (!mounted) return;
     final String? cookie;
     if (Platform.isLinux) {
-      if (!mounted) return;
       cookie = await showDialog<String>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const LinuxCookieDialog(),
+        builder: (context) => NaptaLoginWebViewLinux(
+          initialEmail: email,
+          initialPassword: password,
+        ),
       );
     } else {
-      if (!mounted) return;
       cookie = await showDialog<String>(
         context: context,
         barrierDismissible: false,
