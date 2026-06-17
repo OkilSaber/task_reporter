@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/category.dart';
 import 'glass_container.dart';
 
@@ -30,26 +31,25 @@ class DayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     double totalValue = dayRecords.values.fold(0, (sum, val) => sum + val);
-    final isLocked = status == 'validated';
     final hasStatus = status != null && status != 'prefilled';
     final isWeekend =
         date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
     final isClickable = !isWeekend;
 
     return MouseRegion(
-      cursor: isClickable
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
+      cursor: isClickable ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: GestureDetector(
         onTap: !isClickable
             ? null
-            : () {
-                if (isLocked) {
-                  _showValidatedDayDialog(context);
-                } else {
-                  _showValuePicker(context);
-                }
-              },
+            : () => showDayDialog(
+                context,
+                date: date,
+                dayRecords: dayRecords,
+                categories: categories,
+                dayComment: dayComment,
+                status: status,
+                onChanged: onChanged,
+              ),
         child: GlassContainer(
           blur: 10,
           opacity: isWeekend ? 0.03 : (isToday ? 0.3 : 0.1),
@@ -58,11 +58,7 @@ class DayCell extends StatelessWidget {
           child: Stack(
             children: [
               if (isWeekend)
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: WeekendPainter(),
-                  ),
-                ),
+                Positioned.fill(child: CustomPaint(painter: WeekendPainter())),
               Positioned.fill(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
@@ -92,8 +88,9 @@ class DayCell extends StatelessWidget {
                           '${date.day}',
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight:
-                                isToday ? FontWeight.bold : FontWeight.w500,
+                            fontWeight: isToday
+                                ? FontWeight.bold
+                                : FontWeight.w500,
                             color: isCurrentMonth
                                 ? Colors.white
                                 : Colors.white.withValues(alpha: 0.4),
@@ -175,10 +172,12 @@ class DayCell extends StatelessWidget {
 
     double remaining = totalFlex - currentUsed;
     if (remaining > 0) {
-      bars.add(Flexible(
-        flex: (remaining * 100).toInt(),
-        child: Container(color: Colors.transparent),
-      ));
+      bars.add(
+        Flexible(
+          flex: (remaining * 100).toInt(),
+          child: Container(color: Colors.transparent),
+        ),
+      );
     }
 
     final hasHighlight = highlightedId != null;
@@ -187,19 +186,21 @@ class DayCell extends StatelessWidget {
       if (val > 0) {
         final isHighlighted = cat.id == highlightedId;
         final alpha = hasHighlight ? (isHighlighted ? 1.0 : 0.15) : 0.7;
-        bars.add(Flexible(
-          flex: (val * 100).toInt(),
-          child: hasHighlight
-              ? AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: double.infinity,
-                  color: cat.color.withValues(alpha: alpha),
-                )
-              : Container(
-                  width: double.infinity,
-                  color: cat.color.withValues(alpha: alpha),
-                ),
-        ));
+        bars.add(
+          Flexible(
+            flex: (val * 100).toInt(),
+            child: hasHighlight
+                ? AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: double.infinity,
+                    color: cat.color.withValues(alpha: alpha),
+                  )
+                : Container(
+                    width: double.infinity,
+                    color: cat.color.withValues(alpha: alpha),
+                  ),
+          ),
+        );
       }
     }
 
@@ -245,79 +246,264 @@ class DayCell extends StatelessWidget {
       child: Icon(icon, color: color, size: 16),
     );
   }
+}
 
-  void _showValuePicker(BuildContext context) {
-    // Separate editable from locked categories that have a value today
-    final editableCats = categories.where((c) => !c.isLocked).toList();
-    final lockedCats = categories.where((c) => c.isLocked).toList();
-    final hasLockedValues = lockedCats.any(
-      (c) => (dayRecords[c.id] ?? 0) > 0,
+/// Opens the appropriate dialog for [date]: the editable value picker, or a
+/// read-only view when the day is validated or only holds locked entries.
+/// Shared by [DayCell] taps and external navigation (e.g. comment search).
+/// Does nothing for weekend days, which are not editable.
+void showDayDialog(
+  BuildContext context, {
+  required DateTime date,
+  required Map<String, double> dayRecords,
+  required List<Category> categories,
+  required String? dayComment,
+  required String? status,
+  required void Function(Map<String, double>, String) onChanged,
+}) {
+  final isWeekend =
+      date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+  if (isWeekend) return;
+
+  if (status == 'validated') {
+    _showValidatedDayDialog(
+      context,
+      date: date,
+      dayRecords: dayRecords,
+      categories: categories,
+      dayComment: dayComment,
     );
-    final hasEditableSlots = editableCats.isNotEmpty;
-
-    // If there are no editable categories and the day only has locked entries,
-    // show a simple read-only info dialog.
-    if (!hasEditableSlots || (!hasEditableSlots && hasLockedValues)) {
-      if (hasLockedValues) {
-        _showLockedInfoDialog(context, lockedCats);
-        return;
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return _ValuePickerDialog(
-          initialRecords: dayRecords,
-          initialComment: dayComment ?? '',
-          categories: categories,
-          onSelected: (newRecords, newComment) {
-            onChanged(newRecords, newComment);
-            Navigator.of(context).pop();
-          },
-        );
-      },
+  } else {
+    _showValuePicker(
+      context,
+      date: date,
+      dayRecords: dayRecords,
+      categories: categories,
+      dayComment: dayComment,
+      onChanged: onChanged,
     );
   }
+}
 
-  void _showValidatedDayDialog(BuildContext context) {
-    final filledCats = categories
-        .where((c) => (dayRecords[c.id] ?? 0) > 0)
-        .toList();
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: GlassContainer(
-          padding: const EdgeInsets.all(24),
-          borderRadius: BorderRadius.circular(28),
-          child: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.verified_rounded,
-                      color: Colors.greenAccent.withValues(alpha: 0.85),
-                      size: 22,
+/// Formats [date] as a capitalized French day label, e.g. "Lundi 16 juin 2025".
+String _formatDayDate(DateTime date) {
+  final formatted = DateFormat('EEEE d MMMM yyyy', 'fr').format(date);
+  if (formatted.isEmpty) return formatted;
+  return formatted[0].toUpperCase() + formatted.substring(1);
+}
+
+void _showValuePicker(
+  BuildContext context, {
+  required DateTime date,
+  required Map<String, double> dayRecords,
+  required List<Category> categories,
+  required String? dayComment,
+  required void Function(Map<String, double>, String) onChanged,
+}) {
+  // Separate editable from locked categories that have a value today
+  final editableCats = categories.where((c) => !c.isLocked).toList();
+  final lockedCats = categories.where((c) => c.isLocked).toList();
+  final hasLockedValues = lockedCats.any((c) => (dayRecords[c.id] ?? 0) > 0);
+  final hasEditableSlots = editableCats.isNotEmpty;
+
+  // If there are no editable categories and the day only has locked entries,
+  // show a simple read-only info dialog.
+  if (!hasEditableSlots || (!hasEditableSlots && hasLockedValues)) {
+    if (hasLockedValues) {
+      _showLockedInfoDialog(
+        context,
+        date: date,
+        dayRecords: dayRecords,
+        locked: lockedCats,
+      );
+      return;
+    }
+  }
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return _ValuePickerDialog(
+        date: date,
+        initialRecords: dayRecords,
+        initialComment: dayComment ?? '',
+        categories: categories,
+        onSelected: (newRecords, newComment) {
+          onChanged(newRecords, newComment);
+          Navigator.of(context).pop();
+        },
+      );
+    },
+  );
+}
+
+void _showValidatedDayDialog(
+  BuildContext context, {
+  required DateTime date,
+  required Map<String, double> dayRecords,
+  required List<Category> categories,
+  required String? dayComment,
+}) {
+  final filledCats = categories
+      .where((c) => (dayRecords[c.id] ?? 0) > 0)
+      .toList();
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: GlassContainer(
+        padding: const EdgeInsets.all(24),
+        borderRadius: BorderRadius.circular(28),
+        child: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.verified_rounded,
+                    color: Colors.greenAccent.withValues(alpha: 0.85),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Journée validée',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Journée validée',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDayDate(date),
+                style: const TextStyle(fontSize: 14, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              ...filledCats.map(
+                (c) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: c.color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            width: 1,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          c.name,
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ),
+                      Text(
+                        '${(dayRecords[c.id] ?? 0).toStringAsFixed(2)} JH',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
-                ...filledCats.map((c) => Padding(
+              ),
+              if (dayComment != null && dayComment.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                const Divider(color: Colors.white24),
+                const SizedBox(height: 8),
+                const Text(
+                  'Commentaire',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white70,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    dayComment,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Fermer',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+void _showLockedInfoDialog(
+  BuildContext context, {
+  required DateTime date,
+  required Map<String, double> dayRecords,
+  required List<Category> locked,
+}) {
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: GlassContainer(
+        padding: const EdgeInsets.all(24),
+        borderRadius: BorderRadius.circular(28),
+        child: SizedBox(
+          width: 340,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_rounded, color: Colors.white54, size: 28),
+              const SizedBox(height: 12),
+              const Text(
+                'Journée non travaillée',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDayDate(date),
+                style: const TextStyle(fontSize: 14, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              ...locked
+                  .where((c) => (dayRecords[c.id] ?? 0) > 0)
+                  .map(
+                    (c) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Row(
                         children: [
@@ -349,134 +535,33 @@ class DayCell extends StatelessWidget {
                           ),
                         ],
                       ),
-                    )),
-                if (dayComment != null && dayComment!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  const Divider(color: Colors.white24),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Commentaire',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white70,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      dayComment!,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text(
-                      'Fermer',
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'Fermer',
+                  style: TextStyle(color: Colors.white70),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
-    );
-  }
-
-  void _showLockedInfoDialog(BuildContext context, List<Category> locked) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: GlassContainer(
-          padding: const EdgeInsets.all(24),
-          borderRadius: BorderRadius.circular(28),
-          child: SizedBox(
-            width: 340,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock_rounded, color: Colors.white54, size: 28),
-                const SizedBox(height: 12),
-                const Text(
-                  'Journée non travaillée',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ...locked
-                    .where((c) => (dayRecords[c.id] ?? 0) > 0)
-                    .map((c) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: c.color,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  c.name,
-                                  style: const TextStyle(color: Colors.white70),
-                                ),
-                              ),
-                              Text(
-                                '${(dayRecords[c.id] ?? 0).toStringAsFixed(2)} JH',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Fermer',
-                      style: TextStyle(color: Colors.white70)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
 class _ValuePickerDialog extends StatefulWidget {
+  final DateTime date;
   final Map<String, double> initialRecords;
   final String initialComment;
   final List<Category> categories;
   final Function(Map<String, double>, String) onSelected;
 
   const _ValuePickerDialog({
+    required this.date,
     required this.initialRecords,
     required this.initialComment,
     required this.categories,
@@ -523,15 +608,18 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
   @override
   Widget build(BuildContext context) {
     final locked = widget.categories.where((c) => c.isLocked).toList();
-    final editable = widget.categories
-        .where((c) =>
-            !c.isLocked &&
-            (!c.isHidden || (_currentRecords[c.id] ?? 0) > 0))
-        .toList()
-      ..sort((a, b) {
-        if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
-        return 0;
-      });
+    final editable =
+        widget.categories
+            .where(
+              (c) =>
+                  !c.isLocked &&
+                  (!c.isHidden || (_currentRecords[c.id] ?? 0) > 0),
+            )
+            .toList()
+          ..sort((a, b) {
+            if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+            return 0;
+          });
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -552,6 +640,11 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDayDate(widget.date),
+                style: const TextStyle(fontSize: 14, color: Colors.white70),
               ),
               const SizedBox(height: 12),
               Text(
@@ -618,8 +711,10 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Annuler',
-                        style: TextStyle(color: Colors.white70)),
+                    child: const Text(
+                      'Annuler',
+                      style: TextStyle(color: Colors.white70),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
@@ -727,20 +822,26 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
               width: 70,
               child: TextField(
                 controller: controller,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 textAlign: TextAlign.end,
                 decoration: InputDecoration(
                   isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 4,
+                  ),
                   suffixText: ' JH',
-                  suffixStyle:
-                      const TextStyle(color: Colors.white38, fontSize: 10),
+                  suffixStyle: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10,
+                  ),
                   enabledBorder: UnderlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                    borderSide: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
                   ),
                   focusedBorder: UnderlineInputBorder(
                     borderSide: BorderSide(color: cat.color),

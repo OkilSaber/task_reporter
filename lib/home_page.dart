@@ -10,6 +10,8 @@ import 'screens/login_screen.dart';
 import 'services/napta_service.dart';
 import 'widgets/calendar_grid.dart';
 import 'widgets/category_manager_dialog.dart';
+import 'widgets/comment_search_dialog.dart';
+import 'widgets/day_cell.dart';
 import 'widgets/glass_container.dart';
 import 'services/update_service.dart';
 import 'widgets/update_dialog.dart';
@@ -211,6 +213,32 @@ class _HomePageState extends State<HomePage> {
           },
         );
       },
+    );
+  }
+
+  Future<void> _openCommentSearch() async {
+    final selectedDate = await showDialog<DateTime>(
+      context: context,
+      builder: (context) => CommentSearchDialog(dayComments: _dayComments),
+    );
+    if (selectedDate == null || !mounted) return;
+
+    // Jump the calendar to the selected day's month...
+    final month = DateTime(selectedDate.year, selectedDate.month, 1);
+    setState(() => _currentMonth = month);
+    _fetchMonthIfNeeded(month);
+
+    // ...then open that day's dialog directly, as if the cell was tapped.
+    final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+    showDayDialog(
+      context,
+      date: selectedDate,
+      dayRecords: _dayRecords[dateStr] ?? {},
+      categories: _categories,
+      dayComment: _dayComments[dateStr],
+      status: _dayStatuses[dateStr],
+      onChanged: (records, comment) =>
+          _onDayDataChanged(selectedDate, records, comment),
     );
   }
 
@@ -778,11 +806,15 @@ class _HomePageState extends State<HomePage> {
       final id = 'napta_${p['id']}';
       if (!existingIds.contains(id)) {
         final prefix = p['client_name'] != null ? '${p['client_name']} – ' : '';
-        newCats.add(Category(
-          id: id,
-          name: '$prefix${p['name']}',
-          color: Color(palette[(_categories.length + newCats.length) % palette.length]),
-        ));
+        newCats.add(
+          Category(
+            id: id,
+            name: '$prefix${p['name']}',
+            color: Color(
+              palette[(_categories.length + newCats.length) % palette.length],
+            ),
+          ),
+        );
       }
     }
 
@@ -888,8 +920,7 @@ class _HomePageState extends State<HomePage> {
                       );
                       return MouseRegion(
                         cursor: SystemMouseCursors.click,
-                        onEnter: (_) =>
-                            _hoveredCategoryId.value = category.id,
+                        onEnter: (_) => _hoveredCategoryId.value = category.id,
                         onExit: (_) => _hoveredCategoryId.value = null,
                         child: ValueListenableBuilder<String?>(
                           valueListenable: _hoveredCategoryId,
@@ -1270,6 +1301,29 @@ class _HomePageState extends State<HomePage> {
                                   onPressed: _goToToday,
                                   child: const Text(
                                     "Aujourd'hui",
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white.withValues(
+                                      alpha: 0.15,
+                                    ),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: _openCommentSearch,
+                                  icon: const Icon(Icons.search, size: 16),
+                                  label: const Text(
+                                    'Rechercher',
                                     style: TextStyle(fontSize: 13),
                                   ),
                                 ),
