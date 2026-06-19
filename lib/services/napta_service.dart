@@ -38,7 +38,10 @@ class NaptaService {
       final email = await SecurePrefs.read('napta_email');
       final password = await SecurePrefs.read('napta_password');
 
-      if (email == null || email.isEmpty || password == null || password.isEmpty) {
+      if (email == null ||
+          email.isEmpty ||
+          password == null ||
+          password.isEmpty) {
         return false;
       }
 
@@ -73,7 +76,8 @@ class NaptaService {
         if (url != null && url.toString().contains('/login')) {
           final emailJson = jsonEncode(email);
           final passwordJson = jsonEncode(password);
-          final js = """
+          final js =
+              """
             (function() {
               var hasClicked = false;
               function runStep() {
@@ -92,7 +96,7 @@ class NaptaService {
                   } else if (passwordInput && passwordInput.offsetParent !== null) {
                     passwordInput.value = $passwordJson;
                     passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    var loginBtn = document.getElementsByClassName('_button-login-password')[0];
+                    var loginBtn = document.getElementById('kc-login');
                     if (loginBtn && loginBtn.offsetParent !== null) {
                       hasClicked = true;
                       loginBtn.click();
@@ -153,7 +157,6 @@ class NaptaService {
 
     final response = await _sendRequest(() => http.get(uri, headers: _headers));
 
-
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else if (response.statusCode == 401 || response.statusCode == 403) {
@@ -176,7 +179,6 @@ class NaptaService {
       'user_position,user_config,first_login_on,applicable_weekmask,is_vip',
     );
 
-
     final response = await _sendRequest(() {
       final jsonApiHeaders = {
         ..._headers,
@@ -185,7 +187,6 @@ class NaptaService {
       };
       return http.get(uri, headers: jsonApiHeaders);
     });
-
 
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -243,8 +244,11 @@ class NaptaService {
   /// Fetch all projects visible in the user's current-month timesheet.
   /// Step 1: call reporting for the full month to discover project IDs.
   /// Step 2: fetch project details with the browser URL pattern.
-  Future<List<Map<String, dynamic>>> getUserProjects(String userId,
-      {int? year, int? month}) async {
+  Future<List<Map<String, dynamic>>> getUserProjects(
+    String userId, {
+    int? year,
+    int? month,
+  }) async {
     final targetYear = year ?? DateTime.now().year;
     final targetMonth = month ?? DateTime.now().month;
     final reportJson = await _fetchReporting(
@@ -267,7 +271,6 @@ class NaptaService {
         .toSet()
         .toList();
 
-
     if (projectIds.isEmpty) return [];
 
     return _fetchProjectDetails(projectIds);
@@ -282,33 +285,38 @@ class NaptaService {
         "project": {
           "input_types": ["project", "client"],
           "extra_filters": [
-            {"is_archived": false, "timesheeting_activated": [true, null]}
+            {
+              "is_archived": false,
+              "timesheeting_activated": [true, null],
+            },
           ],
-          "excluded_ids": [305, 306, 358, 359, 361, 363, 409]
-        }
+          "excluded_ids": [305, 306, 358, 359, 361, 363, 409],
+        },
       },
-      "page_number": 0
+      "page_number": 0,
     };
 
-    final resp = await _sendRequest(() => http.post(
-      uri,
-      headers: {
-        ..._headers,
-        'accept': '*/*',
-        'content-type': 'application/json',
-        'referer': 'https://app.napta.io/timesheet',
-      },
-      body: jsonEncode(body),
-    ));
-
+    final resp = await _sendRequest(
+      () => http.post(
+        uri,
+        headers: {
+          ..._headers,
+          'accept': '*/*',
+          'content-type': 'application/json',
+          'referer': 'https://app.napta.io/timesheet',
+        },
+        body: jsonEncode(body),
+      ),
+    );
 
     if (resp.statusCode != 200) {
       throw NaptaException('Erreur recherche projects (${resp.statusCode}).');
     }
 
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final results = (data['results'] as List<dynamic>).cast<Map<String, dynamic>>();
-    
+    final results = (data['results'] as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+
     final projectIds = results.map((r) => r['id'].toString()).toList();
     if (projectIds.isEmpty) return [];
 
@@ -316,7 +324,9 @@ class NaptaService {
   }
 
   /// Step 2: fetch project details — exact URL pattern from the browser
-  Future<List<Map<String, dynamic>>> _fetchProjectDetails(List<String> projectIds) async {
+  Future<List<Map<String, dynamic>>> _fetchProjectDetails(
+    List<String> projectIds,
+  ) async {
     final projUri = Uri(
       scheme: 'https',
       host: 'app.napta.io',
@@ -349,7 +359,9 @@ class NaptaService {
   }
 
   /// Returns per-day data (records and statuses) for the given month.
-  Future<({Map<String, Map<String, double>> records, Map<String, String> statuses})> 
+  Future<
+    ({Map<String, Map<String, double>> records, Map<String, String> statuses})
+  >
   getMonthlyDayRecords(
     String userId, {
     required int year,
@@ -448,25 +460,26 @@ class NaptaService {
       path: '/api/v1/timesheet_new/reporting',
     );
 
-    final resp = await _sendRequest(() => http.post(
-      uri,
-      headers: {
-        ..._headers,
-        'accept': '*/*',
-        'content-type': 'application/json',
-        'referer': 'https://app.napta.io/timesheet',
-      },
-      body: jsonEncode({
-        'user_id': userId,
-        'start_date': startDate,
-        'end_date': endDate,
-        'filters': {},
-        'page_number': 0,
-        'time_mode': 'day',
-        'prefill_timesheets': true,
-      }),
-    ));
-
+    final resp = await _sendRequest(
+      () => http.post(
+        uri,
+        headers: {
+          ..._headers,
+          'accept': '*/*',
+          'content-type': 'application/json',
+          'referer': 'https://app.napta.io/timesheet',
+        },
+        body: jsonEncode({
+          'user_id': userId,
+          'start_date': startDate,
+          'end_date': endDate,
+          'filters': {},
+          'page_number': 0,
+          'time_mode': 'day',
+          'prefill_timesheets': true,
+        }),
+      ),
+    );
 
     if (resp.statusCode != 200) {
       throw NaptaException('Erreur timesheet reporting (${resp.statusCode}).');
@@ -530,10 +543,7 @@ class NaptaService {
           final projectIdStr = catId.replaceFirst('napta_', '');
           final projectId = int.tryParse(projectIdStr);
           if (projectId != null) {
-            userRecords.add({
-              'project_id': projectId,
-              'value': value,
-            });
+            userRecords.add({'project_id': projectId, 'value': value});
           }
         }
       });
@@ -555,17 +565,18 @@ class NaptaService {
       'prefill_timesheets': true,
     };
 
-    final resp = await _sendRequest(() => http.post(
-      uri,
-      headers: {
-        ..._headers,
-        'accept': '*/*',
-        'content-type': 'application/json',
-        'referer': 'https://app.napta.io/timesheet',
-      },
-      body: jsonEncode(body),
-    ));
-
+    final resp = await _sendRequest(
+      () => http.post(
+        uri,
+        headers: {
+          ..._headers,
+          'accept': '*/*',
+          'content-type': 'application/json',
+          'referer': 'https://app.napta.io/timesheet',
+        },
+        body: jsonEncode(body),
+      ),
+    );
 
     if (resp.statusCode != 200) {
       throw NaptaException('Erreur sauvegarde timesheet (${resp.statusCode}).');
@@ -592,17 +603,18 @@ class NaptaService {
       'prefill_timesheets': true,
     };
 
-    final resp = await _sendRequest(() => http.post(
-      uri,
-      headers: {
-        ..._headers,
-        'accept': '*/*',
-        'content-type': 'application/json',
-        'referer': 'https://app.napta.io/timesheet',
-      },
-      body: jsonEncode(body),
-    ));
-
+    final resp = await _sendRequest(
+      () => http.post(
+        uri,
+        headers: {
+          ..._headers,
+          'accept': '*/*',
+          'content-type': 'application/json',
+          'referer': 'https://app.napta.io/timesheet',
+        },
+        body: jsonEncode(body),
+      ),
+    );
 
     if (resp.statusCode != 200) {
       throw NaptaException(

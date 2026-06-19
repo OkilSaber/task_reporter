@@ -97,9 +97,7 @@ class _NaptaLoginWebViewState extends State<NaptaLoginWebView> {
                   ),
                   child: !_cookiesCleared
                       ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                          ),
+                          child: CircularProgressIndicator(color: Colors.white),
                         )
                       : InAppWebView(
                           initialUrlRequest: URLRequest(
@@ -113,12 +111,11 @@ class _NaptaLoginWebViewState extends State<NaptaLoginWebView> {
                           },
                           onLoadStop: (controller, url) async {
                             setState(() => _isLoading = false);
-                            if (url != null && url.toString().contains('/login')) {
+                            if (url != null &&
+                                url.toString().contains('/login')) {
                               _autoFill();
                             }
                             _checkForCookie();
-                          },
-                          onConsoleMessage: (controller, consoleMessage) {
                           },
                         ),
                 ),
@@ -137,13 +134,14 @@ class _NaptaLoginWebViewState extends State<NaptaLoginWebView> {
     final emailJson = jsonEncode(widget.initialEmail);
     final passwordJson = jsonEncode(widget.initialPassword);
 
-    final js = """
+    final js =
+        """
       (function() {
         var hasClicked = false;
 
         function runStep() {
           if (hasClicked) return;
-          
+
           try {
             var emailInput = document.getElementById('email');
             var passwordInput = document.getElementById('password');
@@ -153,21 +151,19 @@ class _NaptaLoginWebViewState extends State<NaptaLoginWebView> {
               console.log("[AutoFill] Step 1: Filling Email");
               emailInput.value = $emailJson;
               emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-              
+
               var nextBtn = document.getElementsByClassName('napta-button')[0];
               if (nextBtn && nextBtn.offsetParent !== null) {
-                console.log("[AutoFill] Clicking Next");
                 hasClicked = true;
                 nextBtn.click();
               }
-            } 
+            }
             // Step 2: Password Screen (Check if visible)
             else if (passwordInput && passwordInput.offsetParent !== null) {
-              console.log("[AutoFill] Step 2: Filling Password");
               passwordInput.value = $passwordJson;
               passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-              
-              var loginBtn = document.getElementsByClassName('_button-login-password')[0];
+
+              var loginBtn = document.getElementById('kc-login');
               if (loginBtn && loginBtn.offsetParent !== null) {
                 console.log("[AutoFill] Clicking Login");
                 hasClicked = true;
