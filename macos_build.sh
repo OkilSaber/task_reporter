@@ -1,12 +1,11 @@
 #!/bin/bash
 set -e
 
-rm -f *.dmg
+rm -rf *.dmg
 
 APP="build/macos/Build/Products/Release/Task Reporter.app"
 ENTITLEMENTS="macos/Runner/Release.entitlements"
 
-flutter clean
 flutter build macos --release
 
 rm -f "$APP/Contents/embedded.provisionprofile"

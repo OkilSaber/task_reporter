@@ -1,3 +1,5 @@
+#!/bin/bash
+
 rm -rf build_linux
 rm -rf build_linux.zip
 
