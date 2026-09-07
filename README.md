@@ -11,6 +11,7 @@
 - **Commentaires Locaux Privés** : Ajoutez des notes personnelles sur n'importe quel jour. Ces commentaires sont stockés **uniquement sur votre appareil** et ne sont jamais envoyés à Napta.
 - **Optimisation Intelligente** : Lors de la sauvegarde, l'application n'envoie que les jours que vous avez réellement modifiés, garantissant une rapidité maximale et évitant d'écraser inutilement vos données existantes.
 - **Indicateurs de Statut** : Visualisez en un coup d'œil l'état de vos journées (Validé, En attente, Refusé ou Brouillon) grâce à des icônes et des infobulles claires.
+- **Export CSV Mensuel** : Exportez le mois affiché en un clic dans un fichier CSV séparé par des `;`, une ligne par saisie (catégorie, date, commentaire, durée).
 - **Aperçu Visuel** : Chaque cellule du calendrier affiche une barre de progression colorée représentant la répartition de votre temps de travail.
 
 ## 🛠 Comment l'utiliser ?
@@ -43,6 +44,25 @@ Dès que vous avez des modifications non synchronisées, un bouton **Sauvegarder
 ### 6. Soumission pour Approbation
 
 Pour soumettre une semaine complète à votre manager, cliquez sur l'icône **Avion en papier** à droite de la ligne correspondante.
+
+### 7. Export CSV du mois
+
+Le bouton **Export CSV** exporte le mois affiché dans un fichier CSV séparé par des points-virgules (`;`). Une boîte de dialogue vous laisse choisir l'emplacement et le nom du fichier (par défaut `task_reporter_AAAA-MM.csv`).
+
+Chaque ligne correspond à une saisie (un jour × une catégorie) et suit le format :
+
+```
+id catégorie;nom catégorie;YYYY/MM/DD;commentaire;durée entrée
+```
+
+Exemple :
+
+```
+12345;Projet Alpha;2026/09/03;Réunion client;0.75
+napta_bank_holiday;Jour férié;2026/09/07;;1.00
+```
+
+Les saisies à zéro sont ignorées, les jours sont triés par ordre chronologique, et les commentaires contenant un `;`, un guillemet ou un retour à la ligne sont échappés selon la convention CSV standard. Le fichier est encodé en UTF-8 avec BOM pour que les accents s'affichent correctement dans Excel.
 
 ## 🔒 Confidentialité et Sécurité
 

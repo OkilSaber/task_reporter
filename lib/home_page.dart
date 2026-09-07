@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/secure_prefs.dart';
 import 'models/category.dart';
 import 'screens/login_screen.dart';
+import 'services/csv_export_service.dart';
 import 'services/napta_service.dart';
 import 'widgets/calendar_grid.dart';
 import 'widgets/category_manager_dialog.dart';
@@ -240,6 +241,61 @@ class _HomePageState extends State<HomePage> {
       onChanged: (records, comment) =>
           _onDayDataChanged(selectedDate, records, comment),
     );
+  }
+
+  /// Exports the displayed month as a `;`-separated CSV file.
+  Future<void> _exportMonthCsv() async {
+    final csv = CsvExportService.buildMonthCsv(
+      month: _currentMonth,
+      dayRecords: _dayRecords,
+      dayComments: _dayComments,
+      categories: _categories,
+    );
+
+    if (csv.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Aucune saisie à exporter pour ce mois'),
+          backgroundColor: Colors.orangeAccent.withValues(alpha: 0.85),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final path = await CsvExportService.saveCsv(csv, month: _currentMonth);
+      if (path == null || !mounted) return; // cancelled
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export CSV enregistré : $path'),
+          backgroundColor: Colors.green.withValues(alpha: 0.85),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de l\'export CSV: $e'),
+          backgroundColor: Colors.redAccent.withValues(alpha: 0.85),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   void _nextMonth() {
@@ -1324,6 +1380,32 @@ class _HomePageState extends State<HomePage> {
                                   icon: const Icon(Icons.search, size: 16),
                                   label: const Text(
                                     'Rechercher',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white.withValues(
+                                      alpha: 0.15,
+                                    ),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: _exportMonthCsv,
+                                  icon: const Icon(
+                                    Icons.file_download_outlined,
+                                    size: 16,
+                                  ),
+                                  label: const Text(
+                                    'Export CSV',
                                     style: TextStyle(fontSize: 13),
                                   ),
                                 ),
