@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 
 class UpdateService {
-  static const String currentVersion = '1.4.2';
   static const String _releasesUrl =
       'https://api.github.com/repos/OkilSaber/task_reporter/releases/latest';
 
@@ -39,6 +39,10 @@ class UpdateService {
           'user-agent': 'task-reporter-updater',
         },
       );
+
+      // Read from the app bundle (set from pubspec.yaml at build time), so
+      // the version can't drift from the released one.
+      final currentVersion = (await PackageInfo.fromPlatform()).version;
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
