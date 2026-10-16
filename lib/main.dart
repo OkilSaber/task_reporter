@@ -6,11 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/secure_prefs.dart';
 import 'home_page.dart';
 import 'screens/login_screen.dart';
+import 'widgets/app_background.dart';
 import 'services/napta_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr', null);
+  await AppBackground.load();
   runApp(const MyApp());
 }
 
@@ -139,7 +141,7 @@ class _SplashRouterState extends State<_SplashRouter> {
       0xFF7E57C2,
       0xFF388E3C,
       0xFF5D4037,
-      0xFF263238,
+      0xFF78909C,
     ];
     final prefs = await SharedPreferences.getInstance();
     final existing =
@@ -177,17 +179,11 @@ class _SplashRouterState extends State<_SplashRouter> {
   Widget build(BuildContext context) {
     // Splash loading screen
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0F0C29), Color(0xFF302B63), Color(0xFF24243e)],
-          ),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
+      body: Stack(
+        children: [
+          const AppBackground(),
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
+        ],
       ),
     );
   }

@@ -9,6 +9,7 @@ class GlassContainer extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final Color? color;
   final bool isHighlighted;
+  final Color? borderColor;
 
   const GlassContainer({
     super.key,
@@ -19,6 +20,7 @@ class GlassContainer extends StatelessWidget {
     this.padding,
     this.color,
     this.isHighlighted = false,
+    this.borderColor,
   });
 
   @override
@@ -29,13 +31,13 @@ class GlassContainer extends StatelessWidget {
         borderRadius: br,
         boxShadow: [
           BoxShadow(
-            color: isHighlighted 
+            color: isHighlighted
                 ? Colors.white.withValues(alpha: 0.1)
                 : Colors.black.withValues(alpha: 0.1),
             blurRadius: isHighlighted ? 40 : 30,
             spreadRadius: isHighlighted ? 2 : 0,
             offset: const Offset(0, 10),
-          )
+          ),
         ],
       ),
       child: ClipRRect(
@@ -45,10 +47,14 @@ class GlassContainer extends StatelessWidget {
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
-              color: (color ?? Colors.white).withValues(alpha: isHighlighted ? opacity + 0.1 : opacity),
+              color: (color ?? Colors.white).withValues(
+                alpha: isHighlighted ? opacity + 0.1 : opacity,
+              ),
               borderRadius: br,
               border: Border.all(
-                color: Colors.white.withValues(alpha: isHighlighted ? 0.6 : 0.3),
+                color:
+                    borderColor ??
+                    Colors.white.withValues(alpha: isHighlighted ? 0.6 : 0.3),
                 width: isHighlighted ? 2.5 : 1.5,
               ),
             ),

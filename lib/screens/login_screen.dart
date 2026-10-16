@@ -180,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
       0xFF7E57C2, // deep purple
       0xFF388E3C, // dark green
       0xFF5D4037, // brown
-      0xFF263238, // near-black
+      0xFF78909C, // blue grey (near-black was invisible on the dark UI)
     ];
 
     final prefs = await SharedPreferences.getInstance();

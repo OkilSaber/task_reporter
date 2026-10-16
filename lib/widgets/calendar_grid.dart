@@ -81,64 +81,103 @@ class CalendarGrid extends StatelessWidget {
       weekDates.add(weekStartDate);
     }
 
-    return Column(
-      children: [
-        // Header Row
-        Row(
+    const cellGap = 12.0;
+    const actionWidth = 48.0;
+    const listRightPadding = 8.0;
+
+    Widget column(Widget child) => Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: cellGap / 2),
+        child: child,
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cellWidth =
+            (constraints.maxWidth -
+                listRightPadding -
+                actionWidth -
+                7 * cellGap) /
+            7;
+        // Fill the available height, but never taller than square cells.
+        const headerHeight = 40.0;
+        final fitHeight = constraints.maxHeight.isFinite
+            ? (constraints.maxHeight -
+                      headerHeight -
+                      (weeks.length - 1) * cellGap) /
+                  weeks.length
+            : cellWidth;
+        final rowHeight = fitHeight.clamp(
+          72.0,
+          cellWidth.clamp(72.0, double.infinity),
+        );
+
+        return Column(
           children: [
-            ...['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(
-              (day) => Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Text(
-                      day,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 48), // Space for the action column
-          ],
-        ),
-        // Grid Rows
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.only(right: 8),
-            itemCount: weeks.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              return Row(
+            // Header Row
+            Padding(
+              padding: const EdgeInsets.only(right: listRightPadding),
+              child: Row(
                 children: [
-                  ...weeks[index].map(
-                    (cell) => Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: AspectRatio(
-                          aspectRatio: 1.0,
-                          child: cell,
+                  for (final (i, day) in const [
+                    'Lun',
+                    'Mar',
+                    'Mer',
+                    'Jeu',
+                    'Ven',
+                    'Sam',
+                    'Dim',
+                  ].indexed)
+                    column(
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Text(
+                            day,
+                            style: TextStyle(
+                              color: i >= 5 ? Colors.white54 : Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  // Submit Week Action
-                  SizedBox(
-                    width: 48,
-                    child: Center(
-                      child: _buildSubmitButton(weekDates[index]),
-                    ),
-                  ),
+                  const SizedBox(width: actionWidth), // Action column
                 ],
-              );
-            },
-          ),
-        ),
-      ],
+              ),
+            ),
+            // Grid Rows
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.only(right: listRightPadding),
+                itemCount: weeks.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: cellGap),
+                itemBuilder: (context, index) {
+                  return SizedBox(
+                    height: rowHeight,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final cell in weeks[index]) column(cell),
+                        // Submit Week Action
+                        SizedBox(
+                          width: actionWidth,
+                          child: Center(
+                            child: _buildSubmitButton(weekDates[index]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -146,7 +185,8 @@ class CalendarGrid extends StatelessWidget {
     for (int i = 0; i < 7; i++) {
       final date = weekStart.add(Duration(days: i));
       // Ignore weekends
-      if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) {
+      if (date.weekday == DateTime.saturday ||
+          date.weekday == DateTime.sunday) {
         continue;
       }
 
@@ -176,11 +216,7 @@ class CalendarGrid extends StatelessWidget {
     return Tooltip(
       message: 'Soumettre cette semaine',
       child: IconButton(
-        icon: const Icon(
-          Icons.send_rounded,
-          color: Colors.white70,
-          size: 20,
-        ),
+        icon: const Icon(Icons.send_rounded, color: Colors.white70, size: 20),
         onPressed: () => onSubmitWeek(weekStart),
       ),
     );

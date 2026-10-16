@@ -36,7 +36,7 @@ class _CategoryManagerDialogState extends State<CategoryManagerDialog> {
     Color(0xFFBA68C8), // purple
     Color(0xFF7E57C2), // deep purple
     Color(0xFF5D4037), // brown
-    Color(0xFF263238), // near-black
+    Color(0xFF78909C), // blue grey (near-black was invisible on the dark UI)
   ];
 
   @override

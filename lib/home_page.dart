@@ -9,6 +9,7 @@ import 'models/category.dart';
 import 'screens/login_screen.dart';
 import 'services/csv_export_service.dart';
 import 'services/napta_service.dart';
+import 'widgets/app_background.dart';
 import 'widgets/calendar_grid.dart';
 import 'widgets/category_manager_dialog.dart';
 import 'widgets/comment_search_dialog.dart';
@@ -41,6 +42,7 @@ class _HomePageState extends State<HomePage> {
   bool _isSyncing = false;
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
+  DateTime? _lastSyncAt;
   final ValueNotifier<String?> _hoveredCategoryId = ValueNotifier(null);
   final Set<String> _fetchedMonths = {}; // 'yyyy-MM' keys already fetched
   final Set<String> _modifiedDates =
@@ -365,6 +367,7 @@ class _HomePageState extends State<HomePage> {
         _dayRecords.addAll(data.records);
         _dayStatuses.addAll(data.statuses);
         _fetchedMonths.add(monthKey);
+        _lastSyncAt = DateTime.now();
       });
 
       // Only re-encode/write the (potentially large) maps when something changed.
@@ -666,6 +669,7 @@ class _HomePageState extends State<HomePage> {
 
       // Reload to ensure categories and UI are in sync
       await _loadData();
+      if (mounted) setState(() => _lastSyncAt = DateTime.now());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -854,7 +858,7 @@ class _HomePageState extends State<HomePage> {
       0xFF7E57C2, // deep purple
       0xFF388E3C, // dark green
       0xFF5D4037, // brown
-      0xFF263238, // near-black
+      0xFF78909C, // blue grey (near-black was invisible on the dark UI)
     ];
 
     final newCats = <Category>[];
@@ -900,19 +904,340 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Widget _buildHeader() {
+    return GlassContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      borderRadius: BorderRadius.circular(24),
+      child: Row(
+        children: [
+          // Time navigation: month arrows and "today" belong together.
+          IconButton(
+            tooltip: 'Mois précédent',
+            icon: const Icon(Icons.chevron_left, color: Colors.white),
+            onPressed: _prevMonth,
+          ),
+          SizedBox(
+            width: 190,
+            child: Text(
+              DateFormat('MMMM yyyy', 'fr').format(_currentMonth),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Mois suivant',
+            icon: const Icon(Icons.chevron_right, color: Colors.white),
+            onPressed: _nextMonth,
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: _goToToday,
+            child: const Text("Aujourd'hui", style: TextStyle(fontSize: 13)),
+          ),
+          const Spacer(),
+          // Secondary actions: icons with tooltips.
+          _headerIcon(
+            Icons.search,
+            'Rechercher dans les notes',
+            _openCommentSearch,
+          ),
+          _headerIcon(
+            Icons.category_outlined,
+            'Gérer les catégories',
+            _openCategoryManager,
+          ),
+          _headerIcon(
+            Icons.file_download_outlined,
+            'Exporter le mois en CSV',
+            _exportMonthCsv,
+          ),
+          Container(
+            width: 1,
+            height: 24,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            color: Colors.white.withValues(alpha: 0.2),
+          ),
+          _buildSyncStatus(),
+          const SizedBox(width: 10),
+          _buildUserMenu(),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerIcon(IconData icon, String tooltip, VoidCallback onPressed) {
+    return IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon, color: Colors.white70, size: 20),
+      onPressed: onPressed,
+    );
+  }
+
+  /// One status for everything Napta-related: unsent changes are loud (and
+  /// clicking sends them), an up-to-date state stays discreet.
+  Widget _buildSyncStatus() {
+    final unsent = _modifiedDates.length;
+    final busy = _isSaving || _isSyncing;
+    final hasUnsent = _hasUnsavedChanges && !_isSyncing;
+
+    final String label;
+    final String tooltip;
+    final VoidCallback? onTap;
+    if (_isSaving) {
+      label = 'Envoi…';
+      tooltip = 'Envoi des modifications vers Napta';
+      onTap = null;
+    } else if (_isSyncing) {
+      label = 'Synchronisation…';
+      tooltip = 'Synchronisation avec Napta';
+      onTap = null;
+    } else if (hasUnsent) {
+      label = unsent > 1
+          ? '$unsent jours non envoyés · Sauvegarder'
+          : '$unsent jour non envoyé · Sauvegarder';
+      tooltip = 'Enregistrer les modifications sur Napta';
+      onTap = _saveToNapta;
+    } else {
+      label = _lastSyncAt != null
+          ? 'Synchronisé à ${DateFormat('HH:mm').format(_lastSyncAt!)}'
+          : 'Synchroniser';
+      tooltip = 'Synchroniser avec Napta';
+      onTap = _syncFromNapta;
+    }
+
+    final color = hasUnsent ? Colors.amberAccent : Colors.white;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: color.withValues(alpha: hasUnsent ? 0.2 : 0.08),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(
+            color: color.withValues(alpha: hasUnsent ? 0.7 : 0.15),
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (busy)
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white70,
+                    ),
+                  )
+                else if (hasUnsent)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.amberAccent,
+                      shape: BoxShape.circle,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Icons.cloud_done_outlined,
+                    color: Colors.white54,
+                    size: 16,
+                  ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: hasUnsent ? Colors.white : Colors.white60,
+                    fontSize: 13,
+                    fontWeight: hasUnsent ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Avatar menu: profile, sync and logout (kept away from accidental clicks).
+  Widget _buildUserMenu() {
+    final u = widget.naptaUser;
+    final first = (u?['first_name'] ?? u?['firstname'] ?? '').toString();
+    final last = (u?['last_name'] ?? u?['lastname'] ?? '').toString();
+    final fullName = '$first $last'.trim();
+    final initials = [
+      first,
+      last,
+    ].where((p) => p.isNotEmpty).map((p) => p[0].toUpperCase()).join();
+    const itemStyle = TextStyle(color: Colors.white, fontSize: 13);
+
+    return PopupMenuButton<String>(
+      tooltip: fullName.isNotEmpty ? fullName : 'Compte',
+      color: const Color(0xFF3B1A2C),
+      offset: const Offset(0, 48),
+      // Default is 300 ms: too slow for a small menu.
+      popUpAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 150),
+        reverseDuration: Duration(milliseconds: 100),
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+      ),
+      onSelected: (value) {
+        switch (value) {
+          case 'profile':
+            _showUserInfo(context);
+          case 'background':
+            showBackgroundPicker(context);
+          case 'sync':
+            _syncFromNapta();
+          case 'logout':
+            _logout();
+        }
+      },
+      itemBuilder: (context) => [
+        if (u != null) ...[
+          PopupMenuItem(
+            enabled: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fullName.isNotEmpty ? fullName : 'Utilisateur',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if ((u['email'] ?? '').toString().isNotEmpty)
+                  Text(
+                    u['email'].toString(),
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            value: 'profile',
+            child: Row(
+              children: [
+                Icon(Icons.person_outline, color: Colors.white70, size: 18),
+                SizedBox(width: 10),
+                Text('Profil', style: itemStyle),
+              ],
+            ),
+          ),
+        ],
+        const PopupMenuItem(
+          value: 'background',
+          child: Row(
+            children: [
+              Icon(Icons.palette_outlined, color: Colors.white70, size: 18),
+              SizedBox(width: 10),
+              Text("Fond d'écran", style: itemStyle),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'sync',
+          child: Row(
+            children: [
+              Icon(Icons.sync_rounded, color: Colors.white70, size: 18),
+              SizedBox(width: 10),
+              Text('Synchroniser avec Napta', style: itemStyle),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout, color: Colors.redAccent, size: 18),
+              SizedBox(width: 10),
+              Text(
+                'Déconnexion',
+                style: TextStyle(color: Colors.redAccent, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+        ),
+        child: initials.isNotEmpty
+            ? Text(
+                initials,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              )
+            : const Icon(Icons.person_rounded, color: Colors.white70, size: 18),
+      ),
+    );
+  }
+
+  static bool _isHolidayCategory(String catId, Set<String> lockedIds) =>
+      lockedIds.contains(catId) ||
+      catId == 'napta_bank_holiday' ||
+      catId.startsWith('napta_holiday_');
+
+  static String _formatDays(double v) =>
+      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+
   Widget _buildMonthSummary() {
     final Map<String, double> categoryTotals = {};
     double grandTotal = 0;
+    double holidays = 0;
+    final lockedIds = _categories
+        .where((c) => c.isLocked)
+        .map((c) => c.id)
+        .toSet();
 
     _dayRecords.forEach((key, dayMap) {
       try {
         final date = DateFormat('yyyy-MM-dd').parse(key);
         if (date.year == _currentMonth.year &&
             date.month == _currentMonth.month) {
+          final isWeekend =
+              date.weekday == DateTime.saturday ||
+              date.weekday == DateTime.sunday;
           dayMap.forEach((catId, val) {
             if (val > 0) {
               categoryTotals[catId] = (categoryTotals[catId] ?? 0) + val;
               grandTotal += val;
+              if (!isWeekend && _isHolidayCategory(catId, lockedIds)) {
+                holidays += val;
+              }
             }
           });
         }
@@ -921,12 +1246,52 @@ class _HomePageState extends State<HomePage> {
       }
     });
 
-    if (categoryTotals.isEmpty) {
-      return const SizedBox.shrink();
+    // Days to fill this month: working days minus bank holidays / leave.
+    final daysInMonth = DateUtils.getDaysInMonth(
+      _currentMonth.year,
+      _currentMonth.month,
+    );
+    int weekdays = 0;
+    for (int d = 1; d <= daysInMonth; d++) {
+      final wd = DateTime(_currentMonth.year, _currentMonth.month, d).weekday;
+      if (wd != DateTime.saturday && wd != DateTime.sunday) weekdays++;
     }
+    final toFill = weekdays - holidays;
+    final worked = _currentMonthTotal;
 
     final sortedEntries = categoryTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    Category categoryFor(String id) => _categories.firstWhere(
+      (c) => c.id == id,
+      orElse: () => Category(
+        id: id,
+        name: 'Catégorie inconnue',
+        color: const Color(0xFF9E9E9E),
+      ),
+    );
+
+    // Month progress, split by (worked) category.
+    final segments = <Widget>[];
+    for (final entry in sortedEntries) {
+      if (_isHolidayCategory(entry.key, lockedIds)) continue;
+      if (segments.isNotEmpty) segments.add(const SizedBox(width: 1));
+      segments.add(
+        Expanded(
+          flex: (entry.value * 100).round(),
+          child: ColoredBox(color: categoryFor(entry.key).color),
+        ),
+      );
+    }
+    if (toFill > worked) {
+      segments.add(
+        Expanded(
+          flex: ((toFill - worked) * 100).round(),
+          child: const SizedBox(),
+        ),
+      );
+    }
+
+    final monthName = DateFormat('MMMM', 'fr').format(_currentMonth);
 
     return Row(
       children: [
@@ -935,131 +1300,86 @@ class _HomePageState extends State<HomePage> {
           padding: const EdgeInsets.all(24),
           borderRadius: BorderRadius.circular(32),
           child: SizedBox(
-            width: 260,
+            width: 280,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Icon(
-                      Icons.pie_chart_outline,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    SizedBox(width: 12),
                     Text(
-                      'Récapitulatif',
-                      style: TextStyle(
+                      monthName[0].toUpperCase() + monthName.substring(1),
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
+                    const Spacer(),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: worked.toStringAsFixed(2),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' / ${_formatDays(toFill)} j',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.white60,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(right: 12),
-                    itemCount: sortedEntries.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 16),
-                    itemBuilder: (context, index) {
-                      final entry = sortedEntries[index];
-                      final category = _categories.firstWhere(
-                        (c) => c.id == entry.key,
-                        orElse: () => Category(
-                          id: entry.key,
-                          name: 'Catégorie inconnue',
-                          color: const Color(0xFF9E9E9E),
-                        ),
-                      );
-                      return MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        onEnter: (_) => _hoveredCategoryId.value = category.id,
-                        onExit: (_) => _hoveredCategoryId.value = null,
-                        child: ValueListenableBuilder<String?>(
-                          valueListenable: _hoveredCategoryId,
-                          builder: (context, hovered, child) {
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: hovered == category.id
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: child,
-                            );
-                          },
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: category.color,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  category.name,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.white,
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                '${entry.value.toStringAsFixed(2)} j',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    height: 8,
+                    color: Colors.white.withValues(alpha: 0.12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: segments,
+                    ),
                   ),
                 ),
-                const Divider(color: Colors.white24, height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Total mensuel',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      '${grandTotal.toStringAsFixed(2)} j',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+                if (holidays > 0) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_formatDays(holidays)} j de congés / fériés déduits',
+                    style: const TextStyle(fontSize: 12, color: Colors.white54),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Expanded(
+                  child: sortedEntries.isEmpty
+                      ? const Text(
+                          'Aucune saisie ce mois-ci.',
+                          style: TextStyle(color: Colors.white54),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.only(right: 12),
+                          itemCount: sortedEntries.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final entry = sortedEntries[index];
+                            return _buildSummaryRow(
+                              categoryFor(entry.key),
+                              entry.value,
+                              grandTotal,
+                            );
+                          },
+                        ),
                 ),
               ],
             ),
@@ -1069,62 +1389,117 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildSummaryRow(Category category, double value, double grandTotal) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _hoveredCategoryId.value = category.id,
+      onExit: (_) => _hoveredCategoryId.value = null,
+      child: ValueListenableBuilder<String?>(
+        valueListenable: _hoveredCategoryId,
+        builder: (context, hovered, child) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: hovered == category.id
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: child,
+          );
+        },
+        child: Tooltip(
+          message: category.name,
+          waitDuration: const Duration(milliseconds: 500),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (category.client != null)
+                          Text(
+                            category.client!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        Row(
+                          children: [
+                            if (category.isLocked) ...[
+                              const Icon(
+                                Icons.lock_rounded,
+                                size: 12,
+                                color: Colors.white38,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Flexible(
+                              child: Text(
+                                category.project,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${value.toStringAsFixed(2)} j',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              // Share of the month
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: Container(
+                  height: 4,
+                  color: Colors.white.withValues(alpha: 0.1),
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    heightFactor: 1,
+                    widthFactor: grandTotal > 0
+                        ? (value / grandTotal).clamp(0.0, 1.0)
+                        : 0,
+                    child: ColoredBox(color: category.color),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // Vibrant Background
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF8A2387),
-                  Color(0xFFE94057),
-                  Color(0xFFF27121),
-                ],
-              ),
-            ),
-          ),
-          // Decorative Blobs
-          Positioned(
-            top: -100,
-            left: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blueAccent.withValues(alpha: 0.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blueAccent.withValues(alpha: 0.5),
-                    blurRadius: 100,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -150,
-            right: -50,
-            child: Container(
-              width: 400,
-              height: 400,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.purpleAccent.withValues(alpha: 0.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.purpleAccent.withValues(alpha: 0.5),
-                    blurRadius: 100,
-                  ),
-                ],
-              ),
-            ),
-          ),
+          const AppBackground(),
 
           // Main Content
           SafeArea(
@@ -1136,293 +1511,7 @@ class _HomePageState extends State<HomePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Header
-                      GlassContainer(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        borderRadius: BorderRadius.circular(24),
-                        child: Column(
-                          children: [
-                            // Row 1: Navigation + user + logout
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.chevron_left,
-                                    color: Colors.white,
-                                  ),
-                                  onPressed: _prevMonth,
-                                ),
-                                Text(
-                                  DateFormat(
-                                    'MMMM yyyy',
-                                    'fr',
-                                  ).format(_currentMonth),
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.chevron_right,
-                                    color: Colors.white,
-                                  ),
-                                  onPressed: _nextMonth,
-                                ),
-                                const Spacer(),
-                                if (widget.naptaUser != null) ...[
-                                  GestureDetector(
-                                    onTap: () => _showUserInfo(context),
-                                    child: GlassContainer(
-                                      blur: 8,
-                                      opacity: 0.15,
-                                      borderRadius: BorderRadius.circular(12),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 7,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.person_rounded,
-                                            color: Colors.white70,
-                                            size: 15,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            () {
-                                              final u = widget.naptaUser!;
-                                              final name =
-                                                  '${u['first_name'] ?? u['firstname'] ?? ''} ${u['last_name'] ?? u['lastname'] ?? ''}'
-                                                      .trim();
-                                              return name.isNotEmpty
-                                                  ? name
-                                                  : (u['email'] ??
-                                                        'Utilisateur');
-                                            }(),
-                                            style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          const Icon(
-                                            Icons.expand_more_rounded,
-                                            color: Colors.white38,
-                                            size: 14,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ], // end if (naptaUser != null)
-                                // Save button
-                                if (_hasUnsavedChanges) ...[
-                                  Tooltip(
-                                    message:
-                                        'Enregistrer les modifications sur Napta',
-                                    child: GestureDetector(
-                                      onTap: _isSaving ? null : _saveToNapta,
-                                      child: GlassContainer(
-                                        blur: 8,
-                                        opacity: 0.3,
-                                        color: Colors.amberAccent,
-                                        borderRadius: BorderRadius.circular(12),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (_isSaving)
-                                              const SizedBox(
-                                                width: 14,
-                                                height: 14,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: Colors.white70,
-                                                    ),
-                                              )
-                                            else
-                                              const Icon(
-                                                Icons.cloud_upload_rounded,
-                                                color: Colors.white,
-                                                size: 16,
-                                              ),
-                                            const SizedBox(width: 8),
-                                            const Text(
-                                              'Sauvegarder',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                // Sync button
-                                Tooltip(
-                                  message: 'Synchroniser avec Napta',
-                                  child: GestureDetector(
-                                    onTap: _isSyncing ? null : _syncFromNapta,
-                                    child: GlassContainer(
-                                      blur: 8,
-                                      opacity: 0.15,
-                                      borderRadius: BorderRadius.circular(12),
-                                      padding: const EdgeInsets.all(8),
-                                      child: _isSyncing
-                                          ? const SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white70,
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.sync_rounded,
-                                              color: Colors.white70,
-                                              size: 18,
-                                            ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                IconButton(
-                                  tooltip: 'Déconnexion',
-                                  icon: const Icon(
-                                    Icons.logout,
-                                    color: Colors.white60,
-                                    size: 20,
-                                  ),
-                                  onPressed: _logout,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            // Row 2: Actions + total
-                            Row(
-                              children: [
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  onPressed: _openCategoryManager,
-                                  icon: const Icon(Icons.category, size: 16),
-                                  label: const Text(
-                                    'Catégories',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  onPressed: _goToToday,
-                                  child: const Text(
-                                    "Aujourd'hui",
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  onPressed: _openCommentSearch,
-                                  icon: const Icon(Icons.search, size: 16),
-                                  label: const Text(
-                                    'Rechercher',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  onPressed: _exportMonthCsv,
-                                  icon: const Icon(
-                                    Icons.file_download_outlined,
-                                    size: 16,
-                                  ),
-                                  label: const Text(
-                                    'Export CSV',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'Jours travaillés : ${_currentMonthTotal.toStringAsFixed(2)} JH',
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                      _buildHeader(),
                       const SizedBox(height: 24),
                       // Calendar and Summary
                       Expanded(
