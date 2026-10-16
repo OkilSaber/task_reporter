@@ -608,18 +608,14 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
   @override
   Widget build(BuildContext context) {
     final locked = widget.categories.where((c) => c.isLocked).toList();
-    final editable =
-        widget.categories
-            .where(
-              (c) =>
-                  !c.isLocked &&
-                  (!c.isHidden || (_currentRecords[c.id] ?? 0) > 0),
-            )
-            .toList()
-          ..sort((a, b) {
-            if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
-            return 0;
-          });
+    final visible = widget.categories.where(
+      (c) => !c.isLocked && (!c.isHidden || (_currentRecords[c.id] ?? 0) > 0),
+    );
+    // Favorites first, keeping the user-defined order (List.sort isn't stable).
+    final editable = [
+      ...visible.where((c) => c.isFavorite),
+      ...visible.where((c) => !c.isFavorite),
+    ];
 
     return Dialog(
       backgroundColor: Colors.transparent,
