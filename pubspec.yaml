@@ -41,6 +41,7 @@ dependencies:
   flutter_inappwebview: ^6.1.5
   flutter_svg: ^2.0.10+1
   file_selector: ^1.0.3
+  desktop_webview_window: ^0.3.2
 
 dev_dependencies:
   flutter_test:

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/linux_napta_login.dart';
 import '../services/napta_service.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/napta_login_webview.dart';
@@ -38,6 +39,21 @@ class _LoginScreenState extends State<LoginScreen> {
     if (password != null) _passwordController.text = password;
   }
 
+  /// Linux: Napta login in a native WebKitGTK window; falls back to the
+  /// manual cookie entry when no webview can be opened.
+  Future<String?> _linuxLogin(String email, String password) async {
+    try {
+      return await LinuxNaptaLogin.login(email: email, password: password);
+    } catch (_) {
+      if (!mounted) return null;
+      return showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const LinuxCookieDialog(),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -65,12 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final String? cookie;
     if (Platform.isLinux) {
-      if (!mounted) return;
-      cookie = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const LinuxCookieDialog(),
-      );
+      cookie = await _linuxLogin(email, password);
     } else {
       if (!mounted) return;
       cookie = await showDialog<String>(
