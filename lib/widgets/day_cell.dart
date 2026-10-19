@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/category.dart';
 import 'glass_container.dart';
 
@@ -702,7 +703,24 @@ class _ValuePickerDialog extends StatefulWidget {
   State<_ValuePickerDialog> createState() => _ValuePickerDialogState();
 }
 
+/// Order of the categories in the day input.
+enum _DaySort {
+  custom('Personnalisé'),
+  az('Nom de A à Z'),
+  za('Nom de Z à A');
+
+  final String label;
+  const _DaySort(this.label);
+}
+
 class _ValuePickerDialogState extends State<_ValuePickerDialog> {
+  static const _sortPrefsKey = 'dayInputSort';
+  static const _groupPrefsKey = 'dayInputGroupByClient';
+  static const _collapsedPrefsKey = 'dayInputCollapsedClients';
+
+  _DaySort _sort = _DaySort.custom;
+  bool _groupByClient = false;
+  Set<String> _collapsedClients = {};
   late Map<String, double> _currentRecords;
   late TextEditingController _commentController;
   late Map<String, TextEditingController> _valueControllers;
@@ -712,6 +730,8 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
     super.initState();
     _currentRecords = Map.from(widget.initialRecords);
     _commentController = TextEditingController(text: widget.initialComment);
+
+    _loadViewPrefs();
 
     _valueControllers = {};
     for (var cat in widget.categories) {
@@ -735,6 +755,317 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
 
   double get _total => _currentRecords.values.fold(0, (sum, val) => sum + val);
 
+  Future<void> _loadViewPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _sort = _DaySort.values.firstWhere(
+        (s) => s.name == prefs.getString(_sortPrefsKey),
+        orElse: () => _DaySort.custom,
+      );
+      _groupByClient = prefs.getBool(_groupPrefsKey) ?? false;
+      _collapsedClients = (prefs.getStringList(_collapsedPrefsKey) ?? const [])
+          .toSet();
+    });
+  }
+
+  Future<void> _setSort(_DaySort sort) async {
+    setState(() => _sort = sort);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sortPrefsKey, sort.name);
+  }
+
+  Future<void> _toggleGroupByClient() async {
+    setState(() => _groupByClient = !_groupByClient);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_groupPrefsKey, _groupByClient);
+  }
+
+  /// Collapses every group, or expands them all when they're all collapsed.
+  Future<void> _toggleAllClients(List<String> clients) async {
+    final collapseAll = !clients.every(_collapsedClients.contains);
+    setState(() {
+      if (collapseAll) {
+        _collapsedClients.addAll(clients);
+      } else {
+        _collapsedClients.removeAll(clients);
+      }
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_collapsedPrefsKey, _collapsedClients.toList());
+  }
+
+  Future<void> _toggleClient(String client) async {
+    setState(() {
+      if (!_collapsedClients.remove(client)) _collapsedClients.add(client);
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_collapsedPrefsKey, _collapsedClients.toList());
+  }
+
+  /// Editable categories in the chosen order. "Personnalisé" follows the
+  /// category manager's drag-and-drop order (favorites first); name sorts are
+  /// purely alphabetical.
+  List<Category> _ordered(Iterable<Category> visible) {
+    switch (_sort) {
+      case _DaySort.custom:
+        // List.sort isn't stable: partition to keep the user-defined order.
+        return [
+          ...visible.where((c) => c.isFavorite),
+          ...visible.where((c) => !c.isFavorite),
+        ];
+      case _DaySort.az:
+      case _DaySort.za:
+        final sorted = visible.toList()
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
+        return _sort == _DaySort.az ? sorted : sorted.reversed.toList();
+    }
+  }
+
+  /// Rows of the editable list, optionally under a header per client (groups
+  /// keep the order of their first category).
+  List<Widget> _buildEditableRows(List<Category> editable, double total) {
+    if (!_groupByClient) {
+      return [for (final cat in editable) _buildEditableRow(cat, total)];
+    }
+    final groups = <String, List<Category>>{};
+    for (final cat in editable) {
+      groups.putIfAbsent(cat.client ?? '', () => []).add(cat);
+    }
+    return [
+      for (final MapEntry(key: client, value: cats) in groups.entries) ...[
+        _buildClientHeader(client, cats),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _collapsedClients.contains(client)
+              ? const SizedBox(width: double.infinity)
+              : Column(
+                  children: [
+                    for (final cat in cats)
+                      _buildEditableRow(cat, total, showClient: false),
+                  ],
+                ),
+        ),
+      ],
+    ];
+  }
+
+  /// Clickable group header: collapses / expands the client's categories.
+  /// The subtotal stays visible when collapsed.
+  Widget _buildClientHeader(String client, List<Category> cats) {
+    final collapsed = _collapsedClients.contains(client);
+    final subtotal = cats.fold(
+      0.0,
+      (sum, c) => sum + (_currentRecords[c.id] ?? 0),
+    );
+    const style = TextStyle(
+      color: Colors.white70,
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _toggleClient(client),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Row(
+            children: [
+              AnimatedRotation(
+                turns: collapsed ? -0.25 : 0,
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOut,
+                child: const Icon(
+                  Icons.expand_more_rounded,
+                  color: Colors.white54,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        client.isEmpty ? 'Sans client' : client,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: style.copyWith(letterSpacing: 0.5),
+                      ),
+                    ),
+                    if (collapsed) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '· ${cats.length}',
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (subtotal > 0)
+                Text('${subtotal.toStringAsFixed(2)} JH', style: style),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListToolbar(List<String> clients) {
+    final pillShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(9),
+      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+    );
+    const labelStyle = TextStyle(color: Colors.white70, fontSize: 12);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              PopupMenuButton<_DaySort>(
+                tooltip: 'Trier les catégories',
+                initialValue: _sort,
+                color: const Color(0xFF3B1A2C),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                ),
+                popUpAnimationStyle: const AnimationStyle(
+                  duration: Duration(milliseconds: 150),
+                  reverseDuration: Duration(milliseconds: 100),
+                ),
+                onSelected: _setSort,
+                itemBuilder: (context) => [
+                  for (final sort in _DaySort.values)
+                    PopupMenuItem(
+                      value: sort,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 22,
+                            child: sort == _sort
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 16,
+                                  )
+                                : null,
+                          ),
+                          Text(
+                            sort.label,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  shape: pillShape,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.sort_rounded,
+                          color: Colors.white70,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text('Tri : ${_sort.label}', style: labelStyle),
+                        const Icon(
+                          Icons.expand_more_rounded,
+                          color: Colors.white38,
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Material(
+                color: _groupByClient
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : Colors.white.withValues(alpha: 0.06),
+                shape: pillShape,
+                child: InkWell(
+                  customBorder: pillShape,
+                  onTap: _toggleGroupByClient,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _groupByClient
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          color: _groupByClient ? Colors.white : Colors.white54,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Regrouper par client',
+                          style: labelStyle.copyWith(
+                            color: _groupByClient
+                                ? Colors.white
+                                : Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_groupByClient && clients.length > 1)
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              textStyle: const TextStyle(fontSize: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            onPressed: () => _toggleAllClients(clients),
+            icon: Icon(
+              clients.every(_collapsedClients.contains)
+                  ? Icons.unfold_more_rounded
+                  : Icons.unfold_less_rounded,
+              size: 16,
+            ),
+            label: Text(
+              clients.every(_collapsedClients.contains)
+                  ? 'Tout déplier'
+                  : 'Tout replier',
+            ),
+          ),
+      ],
+    );
+  }
+
   void _setValue(Category cat, double value) {
     setState(() {
       _currentRecords[cat.id] = value;
@@ -752,11 +1083,7 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
     final visible = widget.categories.where(
       (c) => !c.isLocked && (!c.isHidden || (_currentRecords[c.id] ?? 0) > 0),
     );
-    // Favorites first, keeping the user-defined order (List.sort isn't stable).
-    final editable = [
-      ...visible.where((c) => c.isFavorite),
-      ...visible.where((c) => !c.isFavorite),
-    ];
+    final editable = _ordered(visible);
     final total = _total;
 
     return Dialog(
@@ -811,7 +1138,11 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
                 ),
                 const SizedBox(height: 12),
                 _buildGauge(total, [...locked, ...editable]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+                _buildListToolbar([
+                  ...{for (final c in editable) c.client ?? ''},
+                ]),
+                const SizedBox(height: 8),
                 // Only the category list scrolls: total and note stay in view.
                 Flexible(
                   child: ListView(
@@ -821,7 +1152,7 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
                       ...locked.map(_buildLockedRow),
                       if (locked.isNotEmpty && editable.isNotEmpty)
                         const Divider(color: Colors.white24, height: 16),
-                      ...editable.map((cat) => _buildEditableRow(cat, total)),
+                      ..._buildEditableRows(editable, total),
                     ],
                   ),
                 ),
@@ -960,7 +1291,11 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
   }
 
   /// Client on a small line above the project name.
-  Widget _buildName(Category cat, {required bool dimmed}) {
+  Widget _buildName(
+    Category cat, {
+    required bool dimmed,
+    bool showClient = true,
+  }) {
     return Tooltip(
       message: cat.name,
       waitDuration: const Duration(milliseconds: 500),
@@ -968,7 +1303,7 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (cat.client != null)
+          if (showClient && cat.client != null)
             Text(
               cat.client!,
               maxLines: 1,
@@ -1032,7 +1367,11 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
     );
   }
 
-  Widget _buildEditableRow(Category cat, double total) {
+  Widget _buildEditableRow(
+    Category cat,
+    double total, {
+    bool showClient = true,
+  }) {
     final val = _currentRecords[cat.id] ?? 0.0;
     final controller = _valueControllers[cat.id]!;
     // Once other categories hold part of the day, "1" becomes "reste":
@@ -1056,7 +1395,10 @@ class _ValuePickerDialogState extends State<_ValuePickerDialog> {
         children: [
           _dot(cat.color),
           const SizedBox(width: 10),
-          SizedBox(width: 210, child: _buildName(cat, dimmed: false)),
+          SizedBox(
+            width: 210,
+            child: _buildName(cat, dimmed: false, showClient: showClient),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: SliderTheme(
